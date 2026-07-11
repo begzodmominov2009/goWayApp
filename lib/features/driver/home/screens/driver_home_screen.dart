@@ -488,15 +488,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
             ),
           ),
 
-          AnimatedSlide(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutCubic,
-            offset: _showTopPanel ? Offset.zero : const Offset(0, -1.5),
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 220),
-              opacity: _showTopPanel ? 1 : 0,
-              child: Positioned(
-                top: 0, left: 0, right: 0,
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              offset: _showTopPanel ? Offset.zero : const Offset(0, -1.5),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 220),
+                opacity: _showTopPanel ? 1 : 0,
                 child: SafeArea(
                   bottom: false,
                   child: Padding(
