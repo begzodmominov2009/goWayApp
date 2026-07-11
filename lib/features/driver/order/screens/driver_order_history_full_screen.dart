@@ -5,23 +5,36 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
-import '../../../../core/router/app_router.dart';
 
-class DriverHistoryScreen extends ConsumerStatefulWidget {
-  const DriverHistoryScreen({super.key});
+enum _HistoryFilter { all, delivered, cancelled }
+
+class DriverOrderHistoryFullScreen extends ConsumerStatefulWidget {
+  const DriverOrderHistoryFullScreen({super.key});
 
   @override
-  ConsumerState<DriverHistoryScreen> createState() => _DriverHistoryScreenState();
+  ConsumerState<DriverOrderHistoryFullScreen> createState() => _DriverOrderHistoryFullScreenState();
 }
 
-class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
+class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistoryFullScreen> {
   List<Map<String, dynamic>> _orders = [];
   bool _loading = true;
+  _HistoryFilter _filter = _HistoryFilter.all;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    _searchCtrl.addListener(() {
+      setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -36,25 +49,40 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
     }
   }
 
-  // Faqat oxirgi 7 kunlik buyurtmalar
-  List<Map<String, dynamic>> get _recentOrders {
-    final cutoff = DateTime.now().subtract(const Duration(days: 7));
-    return _orders.where((order) {
-      final createdAt = order['createdAt'] as String?;
-      if (createdAt == null) return false;
-      final date = DateTime.tryParse(createdAt);
-      return date != null && date.isAfter(cutoff);
+  bool _matchesFilter(String status) {
+    switch (_filter) {
+      case _HistoryFilter.all:
+        return true;
+      case _HistoryFilter.delivered:
+        return status == 'DELIVERED' || status == 'COMPLETED';
+      case _HistoryFilter.cancelled:
+        return status == 'CANCELLED';
+    }
+  }
+
+  bool _matchesSearch(Map<String, dynamic> order) {
+    if (_searchQuery.isEmpty) return true;
+    final from = (order['fromCity'] as String? ?? '').toLowerCase();
+    final to = (order['toCity'] as String? ?? '').toLowerCase();
+    return from.contains(_searchQuery) || to.contains(_searchQuery);
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    return _orders.where((o) {
+      final status = o['status'] as String? ?? '';
+      return _matchesFilter(status) && _matchesSearch(o);
     }).toList();
   }
 
-  // Sana bo'yicha guruhlash — client_orders_screen.dart bilan bir xil naqsh
+  // Sana bo'yicha guruhlash — client_orders_screen.dart bilan bir xil naqsh.
+  // Bu yerda (7 kunlik cheklovsiz) TO'LIQ tarix guruhlanadi.
   Map<String, List<Map<String, dynamic>>> _groupedByDate(String locale) {
     final Map<String, List<Map<String, dynamic>>> grouped = {};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    for (final order in _recentOrders) {
+    for (final order in _filtered) {
       final createdAt = order['createdAt'] as String?;
       if (createdAt == null) continue;
       final date = DateTime.tryParse(createdAt);
@@ -133,7 +161,7 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
           icon: Icon(Icons.arrow_back_ios, color: textPrimary, size: 20),
           onPressed: () => context.pop(),
         ),
-        title: Text(AppStrings.get('order_history_title', locale),
+        title: Text(AppStrings.get('order_history_full_title', locale),
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
         actions: [
@@ -145,26 +173,76 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
       ),
       body: Column(
         children: [
-          // "Barchasini ko'rish" — to'liq tarix sahifasiga o'tish
+          // Qidiruv
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: () => context.push(AppRoutes.driverOrderHistoryFull),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(AppStrings.get('view_all_history', locale),
-                        style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
-                    const Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryColor),
-                  ],
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: border),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                style: TextStyle(fontSize: 14, color: textPrimary),
+                decoration: InputDecoration(
+                  hintText: AppStrings.get('search_city_hint', locale),
+                  hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.close, size: 18, color: textSecondary),
+                          onPressed: () => _searchCtrl.clear(),
+                        )
+                      : null,
                 ),
               ),
             ),
           ),
 
-          // Ro'yxat — oxirgi 7 kunlik, sana bo'yicha guruhlangan
+          // Filter tugmalari
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _HistoryFilterBtn(
+                    label: AppStrings.get('filter_all', locale),
+                    selected: _filter == _HistoryFilter.all,
+                    isDark: isDark,
+                    onTap: () => setState(() => _filter = _HistoryFilter.all),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _HistoryFilterBtn(
+                    label: AppStrings.get('filter_delivered', locale),
+                    selected: _filter == _HistoryFilter.delivered,
+                    isDark: isDark,
+                    onTap: () => setState(() => _filter = _HistoryFilter.delivered),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _HistoryFilterBtn(
+                    label: AppStrings.get('filter_cancelled', locale),
+                    selected: _filter == _HistoryFilter.cancelled,
+                    isDark: isDark,
+                    onTap: () => setState(() => _filter = _HistoryFilter.cancelled),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Ro'yxat — barcha buyurtmalar, sana bo'yicha guruhlangan
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -173,16 +251,16 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.receipt_long_outlined, size: 48, color: textSecondary),
-                            const SizedBox(height: 12),
-                            Text(AppStrings.get('no_orders_found', locale), style: TextStyle(color: textSecondary, fontSize: 15)),
+                            Icon(Icons.receipt_long_outlined, size: 64, color: textSecondary),
+                            const SizedBox(height: 16),
+                            Text(AppStrings.get('no_orders_found', locale), style: TextStyle(fontSize: 16, color: textSecondary)),
                           ],
                         ),
                       )
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: grouped.entries.map((entry) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,6 +369,45 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HistoryFilterBtn extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _HistoryFilterBtn({required this.label, required this.selected, required this.isDark, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)])
+              : null,
+          color: selected ? null : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? Colors.transparent : border),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : textSecondary,
+          ),
+        ),
       ),
     );
   }
