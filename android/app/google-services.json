@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "297429227239",
+    "project_id": "goway-53219",
+    "storage_bucket": "goway-53219.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:297429227239:android:5ab42881c6ec56e241b442",
+        "android_client_info": {
+          "package_name": "com.goway.goway_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkrxa777VZEBMSoir4oDDxi3ZEQKbcv8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

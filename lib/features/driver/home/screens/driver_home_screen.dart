@@ -1,0 +1,1278 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:yandex_mapkit/yandex_mapkit.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/localization/locale_provider.dart';
+import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/driver_repository.dart';
+import '../../../../core/network/geocode_repository.dart';
+import '../../../../core/network/rating_repository.dart';
+import '../../../../core/utils/map_icon_helper.dart';
+import '../../../../core/utils/address_helper.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../shared/widgets/rating_dialog.dart';
+import '../widgets/driver_menu_sheet.dart';
+
+const double _kMinZoom = 3.0;
+const double _kMaxZoom = 20.0;
+
+class DriverHomeScreen extends ConsumerStatefulWidget {
+  const DriverHomeScreen({super.key});
+
+  @override
+  ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
+
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteAware {
+  YandexMapController? _mapController;
+  bool _isDark = false;
+  bool _tiltOn = false;
+  double _currentZoom = 14;
+  bool _showTopPanel = true;
+  String _currentAddressLabel = '';
+
+  BitmapDescriptor? _truckIcon;
+  BitmapDescriptor? _finishIcon;
+  BitmapDescriptor? _myLocationIcon;
+
+  bool _isOnline = false;
+  bool _onlineLoading = false;
+  Position? _currentPosition;
+  Timer? _locationTimer;
+  Timer? _offerTimer;
+  Timer? _trackingTimer;
+
+  bool _hasOrder = false;
+  Map<String, dynamic>? _currentOrder;
+  String? _currentOfferId;
+
+  Map<String, dynamic>? _activeOrder;
+  double? _routeDistKm;
+  int? _routeTimeMin;
+  List<MapObject> _mapObjects = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIcons();
+    _initLocation();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newDark = Theme.of(context).brightness == Brightness.dark;
+    if (newDark != _isDark) {
+      _isDark = newDark;
+      if (_activeOrder != null) _updateTracking();
+    }
+    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _locationTimer?.cancel();
+    _offerTimer?.cancel();
+    _trackingTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didPushNext() {
+    if (mounted) setState(() => _showTopPanel = false);
+  }
+
+  @override
+  void didPopNext() {
+    if (mounted) setState(() => _showTopPanel = true);
+  }
+
+  Future<void> _loadIcons() async {
+    if (MapIconHelper.isPreloaded) {
+      setState(() {
+        _truckIcon = MapIconHelper.truckIconReady;
+        _finishIcon = MapIconHelper.finishIconReady;
+        _myLocationIcon = MapIconHelper.myLocationIconReady;
+      });
+      _updateMyLocationPin();
+      return;
+    }
+    await MapIconHelper.preloadAll();
+    if (!mounted) return;
+    setState(() {
+      _truckIcon = MapIconHelper.truckIconReady;
+      _finishIcon = MapIconHelper.finishIconReady;
+      _myLocationIcon = MapIconHelper.myLocationIconReady;
+    });
+    _updateMyLocationPin();
+  }
+
+  void _updateMyLocationPin() {
+    if (_myLocationIcon == null || _currentPosition == null || _activeOrder != null) return;
+    setState(() {
+      _mapObjects = [
+        PlacemarkMapObject(
+          mapId: const MapObjectId('my_location'),
+          point: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+          icon: PlacemarkIcon.single(PlacemarkIconStyle(
+            image: _myLocationIcon!, scale: 0.18, anchor: const Offset(0.5, 0.5),
+          )),
+        ),
+      ];
+    });
+  }
+
+  Future<void> _initLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) _showLocationDeniedNotice();
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) _showLocationDeniedNotice();
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition();
+      setState(() => _currentPosition = position);
+      _mapController?.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: Point(latitude: position.latitude, longitude: position.longitude), zoom: 14),
+        ),
+      );
+      _updateMyLocationPin();
+
+      final repo = ref.read(geocodeRepositoryProvider);
+      final result = await repo.reverse(position.latitude, position.longitude);
+      if (mounted) {
+        setState(() {
+          _currentAddressLabel = result.fullAddr.isNotEmpty
+              ? AddressHelper.shorten(result.fullAddr)
+              : result.city;
+        });
+      }
+
+      _locationTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
+        if (!_isOnline) return;
+        try {
+          final pos = await Geolocator.getCurrentPosition();
+          if (!mounted) return;
+          setState(() => _currentPosition = pos);
+          await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
+          if (_activeOrder != null) {
+            _updateTracking();
+          } else {
+            _updateMyLocationPin();
+          }
+        } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  void _showLocationDeniedNotice() {
+    final locale = ref.read(localeProvider).languageCode;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppStrings.get('location_permission_denied', locale)),
+        backgroundColor: AppTheme.warningColor,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _locateMe() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition();
+      _mapController?.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: Point(latitude: pos.latitude, longitude: pos.longitude), zoom: 15),
+        ),
+        animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.5),
+      );
+    } catch (_) {
+      if (mounted) _showLocationDeniedNotice();
+    }
+  }
+
+  void _goToDestination() {
+    if (_activeOrder == null) return;
+    final status = _activeOrder!['status'] as String;
+    final isPickup = _isPickupPhase(status);
+    final lat = isPickup
+        ? (_activeOrder!['fromLatitude'] as num).toDouble()
+        : (_activeOrder!['toLatitude'] as num).toDouble();
+    final lng = isPickup
+        ? (_activeOrder!['fromLongitude'] as num).toDouble()
+        : (_activeOrder!['toLongitude'] as num).toDouble();
+    _mapController?.moveCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: Point(latitude: lat, longitude: lng), zoom: 15)),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.5),
+    );
+  }
+
+  void _toggleTilt() {
+    if (_currentPosition == null) return;
+    setState(() => _tiltOn = !_tiltOn);
+    _mapController?.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+          zoom: _currentZoom,
+          tilt: _tiltOn ? 45 : 0,
+        ),
+      ),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.4),
+    );
+  }
+
+  void _zoomBy(double delta) {
+    final newZoom = (_currentZoom + delta).clamp(_kMinZoom, _kMaxZoom);
+    _mapController?.moveCamera(
+      CameraUpdate.zoomTo(newZoom),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.25),
+    );
+  }
+
+  Future<void> _toggleOnline() async {
+    if (_onlineLoading) return;
+    setState(() => _onlineLoading = true);
+    try {
+      await ref.read(driverRepositoryProvider).setOnline(!_isOnline);
+      setState(() {
+        _isOnline = !_isOnline;
+        if (!_isOnline) {
+          _hasOrder = false;
+          _currentOrder = null;
+          _currentOfferId = null;
+          _offerTimer?.cancel();
+        }
+      });
+      if (_isOnline) _startOfferPolling();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppStrings.get('generic_error', ref.read(localeProvider).languageCode)}: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _onlineLoading = false);
+    }
+  }
+
+  void _startOfferPolling() {
+    _offerTimer?.cancel();
+    _offerTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!_isOnline || _hasOrder || _activeOrder != null) return;
+      try {
+        final offers = await ref.read(driverRepositoryProvider).getOffers();
+        if (offers.isNotEmpty && mounted && !_hasOrder) {
+          final offer = offers.first;
+          setState(() {
+            _currentOfferId = offer['id'] as String;
+            _currentOrder = Map<String, dynamic>.from(offer['order'] as Map);
+            _hasOrder = true;
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
+  bool _isPickupPhase(String status) => status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
+
+  Future<void> _updateTracking() async {
+    if (_activeOrder == null || _currentPosition == null) return;
+    final status = _activeOrder!['status'] as String;
+    final isPickup = _isPickupPhase(status);
+
+    final targetLat = isPickup
+        ? (_activeOrder!['fromLatitude'] as num).toDouble()
+        : (_activeOrder!['toLatitude'] as num).toDouble();
+    final targetLng = isPickup
+        ? (_activeOrder!['fromLongitude'] as num).toDouble()
+        : (_activeOrder!['toLongitude'] as num).toDouble();
+
+    final repo = ref.read(geocodeRepositoryProvider);
+    final driverLat = _currentPosition!.latitude;
+    final driverLng = _currentPosition!.longitude;
+
+    final route = await repo.getRoute(fromLat: driverLat, fromLng: driverLng, toLat: targetLat, toLng: targetLng);
+
+    if (!mounted) return;
+
+    final points = route?.points
+            .map((c) => Point(latitude: c[0], longitude: c[1]))
+            .toList() ??
+        [
+          Point(latitude: driverLat, longitude: driverLng),
+          Point(latitude: targetLat, longitude: targetLng),
+        ];
+
+    setState(() {
+      _routeDistKm = route?.distanceKm;
+      _routeTimeMin = route?.durationMin;
+      _mapObjects = [
+        PolylineMapObject(
+          mapId: const MapObjectId('driver_route'),
+          polyline: Polyline(points: points),
+          strokeColor: isPickup
+              ? (_isDark ? const Color(0xFF60A5FA) : const Color(0xFF1e3a8a))
+              : (_isDark ? const Color(0xFF34D399) : const Color(0xFF059669)),
+          strokeWidth: 5,
+        ),
+        if (_truckIcon != null)
+          PlacemarkMapObject(
+            mapId: const MapObjectId('driver_pos'),
+            point: Point(latitude: driverLat, longitude: driverLng),
+            icon: PlacemarkIcon.single(PlacemarkIconStyle(
+              image: _truckIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
+            )),
+          ),
+        if (_finishIcon != null)
+          PlacemarkMapObject(
+            mapId: const MapObjectId('target_pos'),
+            point: Point(latitude: targetLat, longitude: targetLng),
+            icon: PlacemarkIcon.single(PlacemarkIconStyle(
+              image: _finishIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
+            )),
+          ),
+      ];
+    });
+
+    _fitBounds(points);
+  }
+
+  void _fitBounds(List<Point> points) {
+    final lats = points.map((p) => p.latitude).toList();
+    final lngs = points.map((p) => p.longitude).toList();
+    final latSpan = lats.reduce((a, b) => a > b ? a : b) - lats.reduce((a, b) => a < b ? a : b);
+    final lngSpan = lngs.reduce((a, b) => a > b ? a : b) - lngs.reduce((a, b) => a < b ? a : b);
+    final latPad = (latSpan * 0.4).clamp(0.015, 2.0);
+    final lngPad = (lngSpan * 0.3).clamp(0.015, 2.0);
+
+    _mapController?.moveCamera(
+      CameraUpdate.newBounds(
+        BoundingBox(
+          northEast: Point(latitude: lats.reduce((a, b) => a > b ? a : b) + latPad,
+              longitude: lngs.reduce((a, b) => a > b ? a : b) + lngPad),
+          southWest: Point(latitude: lats.reduce((a, b) => a < b ? a : b) - latPad * 1.8,
+              longitude: lngs.reduce((a, b) => a < b ? a : b) - lngPad),
+        ),
+      ),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.6),
+    );
+  }
+
+  Future<void> _onAccept() async {
+    if (_currentOfferId == null) return;
+    try {
+      await ref.read(driverRepositoryProvider).acceptOffer(_currentOfferId!);
+      final acceptedOrder = Map<String, dynamic>.from(_currentOrder!);
+      acceptedOrder['status'] = 'ACCEPTED';
+
+      setState(() {
+        _hasOrder = false;
+        _currentOrder = null;
+        _currentOfferId = null;
+        _activeOrder = acceptedOrder;
+      });
+
+      await _updateTracking();
+      _trackingTimer?.cancel();
+      _trackingTimer = Timer.periodic(const Duration(seconds: 8), (_) => _updateTracking());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppStrings.get('generic_error', ref.read(localeProvider).languageCode)}: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  Future<void> _onReject() async {
+    if (_currentOfferId == null) return;
+    try {
+      await ref.read(driverRepositoryProvider).rejectOffer(_currentOfferId!);
+    } catch (_) {}
+    setState(() { _hasOrder = false; _currentOrder = null; _currentOfferId = null; });
+  }
+
+  Future<void> _onAdvance() async {
+    if (_activeOrder == null) return;
+    final orderId = _activeOrder!['id'] as String;
+    final status = _activeOrder!['status'] as String;
+    final isPickup = _isPickupPhase(status);
+    final nextStatus = isPickup ? 'IN_TRANSIT' : 'COMPLETED';
+
+    try {
+      await ref.read(driverRepositoryProvider).updateOrderStatus(orderId, nextStatus);
+      if (!mounted) return;
+
+      if (nextStatus == 'COMPLETED') {
+        _trackingTimer?.cancel();
+        setState(() {
+          _activeOrder = null;
+          _mapObjects = [];
+          _routeDistKm = null;
+          _routeTimeMin = null;
+        });
+        _updateMyLocationPin();
+        if (_isOnline) _startOfferPolling();
+      } else {
+        setState(() {
+          _activeOrder!['status'] = nextStatus;
+        });
+        await _updateTracking();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppStrings.get('generic_error', ref.read(localeProvider).languageCode)}: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  void _openMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const DriverMenuSheet(),
+    );
+  }
+
+  int get _zoomPercent =>
+      (((_currentZoom - _kMinZoom) / (_kMaxZoom - _kMinZoom)) * 100).round().clamp(0, 100);
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = _isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = _isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = _isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: YandexMap(
+              nightModeEnabled: _isDark,
+              onMapCreated: (controller) {
+                _mapController = controller;
+                if (_currentPosition != null) {
+                  controller.moveCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+                        zoom: 14,
+                      ),
+                    ),
+                  );
+                }
+              },
+              onCameraPositionChanged: (pos, reason, finished) {
+                if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
+                  setState(() => _currentZoom = pos.zoom);
+                }
+              },
+              mapObjects: _mapObjects,
+            ),
+          ),
+
+          AnimatedSlide(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+            offset: _showTopPanel ? Offset.zero : const Offset(0, -1.5),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 220),
+              opacity: _showTopPanel ? 1 : 0,
+              child: Positioned(
+                top: 0, left: 0, right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: _openMenu,
+                          child: Container(
+                            width: 46, height: 46,
+                            decoration: BoxDecoration(
+                              color: surface,
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+                            ),
+                            child: Icon(Icons.menu, color: textPrimary, size: 23),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: surface,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 22, height: 22,
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.local_shipping, color: Colors.white, size: 13),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text('GoWay',
+                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                                  ],
+                                ),
+                                if (_currentAddressLabel.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _currentAddressLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 12, color: textSecondary),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: _toggleOnline,
+                          child: _StatusBadge(isOnline: _isOnline, loading: _onlineLoading, locale: locale),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          Positioned(
+            left: 16,
+            top: screenHeight / 2 - 90,
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+                  ),
+                  child: Column(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.add, color: textPrimary, size: 22),
+                        onPressed: () => _zoomBy(1),
+                      ),
+                      Text('$_zoomPercent%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary)),
+                      IconButton(
+                        icon: Icon(Icons.remove, color: textPrimary, size: 22),
+                        onPressed: () => _zoomBy(-1),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: _toggleTilt,
+                  child: _CircleBtn(
+                    icon: Icons.view_in_ar_outlined,
+                    surface: _tiltOn ? AppTheme.primaryColor : surface,
+                    textColor: _tiltOn ? Colors.white : textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Positioned(
+            right: 16,
+            top: screenHeight / 2 - 55,
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: _locateMe,
+                  child: _CircleBtn(icon: Icons.my_location, surface: AppTheme.primaryColor, textColor: Colors.white),
+                ),
+                if (_activeOrder != null) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: _goToDestination,
+                    child: _CircleBtn(icon: Icons.flag, surface: AppTheme.primaryColor, textColor: Colors.white),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              transitionBuilder: (child, animation) => SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+                    .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                child: FadeTransition(opacity: animation, child: child),
+              ),
+              child: _activeOrder != null
+                  ? _ActiveOrderSheet(
+                      key: const ValueKey('active'),
+                      order: _activeOrder!,
+                      isDark: _isDark,
+                      locale: locale,
+                      distKm: _routeDistKm,
+                      timeMin: _routeTimeMin,
+                      onAdvance: _onAdvance,
+                    )
+                  : _hasOrder && _currentOrder != null
+                  ? _OrderSheet(
+                      key: const ValueKey('order'),
+                      order: _currentOrder!,
+                      isDark: _isDark,
+                      locale: locale,
+                      onAccept: _onAccept,
+                      onReject: _onReject,
+                    )
+                  : _EmptySheet(
+                      key: ValueKey('empty_$_isOnline'),
+                      isOnline: _isOnline,
+                      onlineLoading: _onlineLoading,
+                      onToggle: _toggleOnline,
+                      isDark: _isDark,
+                      locale: locale,
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleBtn extends StatelessWidget {
+  final IconData icon;
+  final Color surface;
+  final Color textColor;
+  const _CircleBtn({required this.icon, required this.surface, required this.textColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46, height: 46,
+      decoration: BoxDecoration(
+        color: surface,
+        shape: BoxShape.circle,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+      ),
+      child: Icon(icon, color: textColor, size: 23),
+    );
+  }
+}
+
+class _RouteInfoRow extends StatelessWidget {
+  final double distKm;
+  final int? timeMin;
+  final bool isDark;
+  final String locale;
+
+  const _RouteInfoRow({required this.distKm, this.timeMin, required this.isDark, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
+        const SizedBox(width: 7),
+        Text('${distKm.toStringAsFixed(1)} km',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+        if (timeMin != null) ...[
+          Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
+          Icon(Icons.access_time, size: 14, color: textSecondary),
+          const SizedBox(width: 5),
+          Text(
+            timeMin! >= 60
+                ? '${timeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${timeMin! % 60}${AppStrings.get('route_time_min', locale)}'
+                : '$timeMin ${AppStrings.get('route_time_min', locale)}',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final bool isOnline;
+  final bool loading;
+  final String locale;
+  const _StatusBadge({required this.isOnline, this.loading = false, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isOnline
+              ? [const Color(0xFF1e3a8a), const Color(0xFF2563eb)]
+              : [const Color(0xFF7f1d1d), const Color(0xFFdc2626)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (loading)
+            const SizedBox(width: 10, height: 10,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+          else
+            Container(width: 8, height: 8,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(isOnline ? AppStrings.get('online', locale) : AppStrings.get('offline', locale),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptySheet extends StatelessWidget {
+  final bool isOnline;
+  final bool onlineLoading;
+  final bool isDark;
+  final String locale;
+  final VoidCallback onToggle;
+
+  const _EmptySheet({
+    super.key,
+    required this.isOnline,
+    required this.onlineLoading,
+    required this.onToggle,
+    required this.isDark,
+    required this.locale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final handleColor = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.08), blurRadius: 20)],
+        ),
+        padding: EdgeInsets.only(
+          left: 20, right: 20, top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 4,
+                decoration: BoxDecoration(color: handleColor, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            if (isOnline) ...[
+              Row(
+                children: [
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                    child: const Icon(Icons.local_shipping_outlined, color: AppTheme.primaryColor, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(AppStrings.get('order_waiting', locale),
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
+                        const SizedBox(height: 2),
+                        Text(AppStrings.get('you_are_online', locale),
+                            style: TextStyle(fontSize: 12, color: textSecondary)),
+                      ],
+                    ),
+                  ),
+                  _PulsingDot(),
+                ],
+              ),
+            ] else ...[
+              Icon(Icons.local_shipping_outlined, size: 40, color: textSecondary),
+              const SizedBox(height: 12),
+              Text(AppStrings.get('you_are_offline', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
+              const SizedBox(height: 4),
+              Text(AppStrings.get('go_online_hint', locale),
+                  style: TextStyle(fontSize: 13, color: textSecondary)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: onlineLoading ? null : onToggle,
+                child: Container(
+                  width: double.infinity, height: 48,
+                  decoration: BoxDecoration(
+                    gradient: onlineLoading ? null : const LinearGradient(
+                      colors: [Color(0xFF1e3a8a), Color(0xFF2563eb), Color(0xFF3b82f6)],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                    ),
+                    color: onlineLoading ? (isDark ? AppTheme.darkBorder : AppTheme.borderColor) : null,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: onlineLoading
+                        ? const SizedBox(width: 20, height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text(AppStrings.get('go_online', locale),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderSheet extends StatelessWidget {
+  final Map<String, dynamic> order;
+  final bool isDark;
+  final String locale;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  const _OrderSheet({
+    super.key,
+    required this.order,
+    required this.isDark,
+    required this.locale,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final handleColor = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.08), blurRadius: 20)],
+      ),
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 12,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(child: Container(width: 36, height: 4,
+              decoration: BoxDecoration(color: handleColor, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Text(AppStrings.get('new_order_label', locale),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                    color: AppTheme.primaryColor, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  const Icon(Icons.local_shipping, size: 16, color: AppTheme.primaryColor),
+                  Container(width: 1.5, height: 32, color: handleColor),
+                  const Icon(Icons.flag, size: 16, color: AppTheme.successColor),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(AddressHelper.shorten(order['fromCity'] as String),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
+                    Text(order['fromAddress'] as String,
+                        style: TextStyle(fontSize: 12, color: textSecondary)),
+                    const SizedBox(height: 10),
+                    Text(AddressHelper.shorten(order['toCity'] as String),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
+                    Text(order['toAddress'] as String,
+                        style: TextStyle(fontSize: 12, color: textSecondary)),
+                  ],
+                ),
+              ),
+              Text('${order['price']} so\'m',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _Chip(label: order['truckType'] as String, icon: Icons.local_shipping_outlined, isDark: isDark),
+              const SizedBox(width: 8),
+              _Chip(label: '${order['weight']} t', icon: Icons.scale_outlined, isDark: isDark),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onReject,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.errorColor),
+                    foregroundColor: AppTheme.errorColor,
+                    minimumSize: const Size(0, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text(AppStrings.get('reject_order', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: onAccept,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    minimumSize: const Size(0, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text(AppStrings.get('accept_order', locale),
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isDark;
+  const _Chip({required this.label, required this.icon, this.isDark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600,
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulsingDot extends StatefulWidget {
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(width: 10, height: 10,
+          decoration: const BoxDecoration(color: AppTheme.successColor, shape: BoxShape.circle)),
+    );
+  }
+}
+
+// ===== AKTIV BUYURTMA SHEET (Driver) — ConsumerWidget, baholash uchun =====
+class _ActiveOrderSheet extends ConsumerWidget {
+  final Map<String, dynamic> order;
+  final bool isDark;
+  final String locale;
+  final double? distKm;
+  final int? timeMin;
+  final VoidCallback onAdvance;
+
+  const _ActiveOrderSheet({
+    super.key,
+    required this.order,
+    required this.isDark,
+    required this.locale,
+    this.distKm,
+    this.timeMin,
+    required this.onAdvance,
+  });
+
+  // Yetkazish yakunlanganda — avval clientni baholash so'raladi,
+  // keyin buyurtma yopiladi (onAdvance chaqiriladi)
+  Future<void> _openRatingThenAdvance(BuildContext context, WidgetRef ref) async {
+    final client = order['client'] as Map<String, dynamic>?;
+    final orderId = order['id'] as String? ?? '';
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (ctx) => RatingDialog(
+        title: 'Mijozni baholang',
+        subtitle: client != null ? (client['fullName'] as String? ?? '') : '',
+        onSubmit: (score, note) async {
+          await ref.read(ratingRepositoryProvider).rateClient(
+            orderId: orderId,
+            score: score,
+            note: note,
+          );
+        },
+      ),
+    );
+    onAdvance();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textP = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textS = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bgCard = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+
+    final status = order['status'] as String? ?? 'ACCEPTED';
+    final price = (order['price'] as num?) ?? 0;
+    final fromCity = order['fromCity'] as String? ?? '';
+    final toCity = order['toCity'] as String? ?? '';
+    final fromAddress = order['fromAddress'] as String? ?? '';
+    final toAddress = order['toAddress'] as String? ?? '';
+
+    final isPickup = status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.12), blurRadius: 24, offset: const Offset(0, -4))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Center(child: Container(width: 36, height: 4,
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isPickup
+                          ? AppTheme.primaryColor.withOpacity(0.1)
+                          : AppTheme.successColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(width: 7, height: 7,
+                        decoration: BoxDecoration(
+                          color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isPickup ? AppStrings.get('going_to_client', locale) : AppStrings.get('cargo_on_way', locale),
+                        style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700,
+                          color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      final clientName = order['client']?['fullName'] as String? ?? '';
+                      context.push('/chat/${order['id']}', extra: clientName);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.chat_bubble_outline, size: 18, color: AppTheme.primaryColor),
+                    ),
+                  ),
+                  Text(
+                    '${(price / 1000).toStringAsFixed(0)} 000 so\'m',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textP),
+                  ),
+                ]),
+                if (distKm != null) ...[
+                  const SizedBox(height: 10),
+                  _RouteInfoRow(distKm: distKm!, timeMin: timeMin, isDark: isDark, locale: locale),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: bgCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: border, width: 0.5),
+              ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Column(children: [
+                  const Icon(Icons.local_shipping, size: 16, color: AppTheme.primaryColor),
+                  Container(width: 2, height: 28, color: border),
+                  const Icon(Icons.flag, size: 16, color: AppTheme.successColor),
+                ]),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(AddressHelper.shorten(fromCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
+                    if (fromAddress.isNotEmpty)
+                      Text(fromAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 16),
+                    Text(AddressHelper.shorten(toCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
+                    if (toAddress.isNotEmpty)
+                      Text(toAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: EdgeInsets.only(
+              left: 20, right: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 16,
+            ),
+            child: isPickup
+                ? _DriverBtn(
+                    label: AppStrings.get('picked_up_continue', locale),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1e3a8a), Color(0xFF2563eb)],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                    ),
+                    onTap: onAdvance,
+                  )
+                : _DriverBtn(
+                    label: AppStrings.get('delivered_finish', locale),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF065f46), Color(0xFF059669)],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                    ),
+                    onTap: () => _openRatingThenAdvance(context, ref),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DriverBtn extends StatelessWidget {
+  final String label;
+  final LinearGradient gradient;
+  final VoidCallback onTap;
+
+  const _DriverBtn({required this.label, required this.gradient, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: double.infinity, height: 52,
+      decoration: BoxDecoration(
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4))],
+      ),
+      child: Center(child: Text(label,
+          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))),
+    ),
+  );
+}

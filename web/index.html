@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="GoWay">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>GoWay</title>
+  <link rel="manifest" href="manifest.json">
+  <!-- Yandex Maps JS API - key backend dan dinamik yuklanadi -->
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.goWayMap = null;
+    window.driverPlacemark = null;
+    window.myLocationPlacemark = null;
+    window.clientPinPlacemark = null;
+    window.isDarkMode = false;
+    window.onAddressFound = null;
+    window.API_BASE = 'http://localhost:3000/api/v1';
+
+    // Backend dan JS API key olib xaritani yuklash
+    window.loadYandexMaps = function(callback) {
+      if (window.ymaps) { callback(); return; }
+      fetch(window.API_BASE + '/geocode/config')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var script = document.createElement('script');
+          script.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + data.jsApiKey + '&lang=uz_UZ';
+          script.onload = function() {
+            ymaps.ready(callback);
+          };
+          document.head.appendChild(script);
+        })
+        .catch(function() { console.error('Yandex Maps yuklanmadi'); });
+    };
+
+    // Backend geocode funksiyalari
+    window.geocodeAddress = function(lat, lng, callback) {
+      fetch(window.API_BASE + '/geocode/reverse?lat=' + lat + '&lng=' + lng)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { callback(d.city||'', d.street||'', d.fullAddr||''); })
+        .catch(function() { callback('','',''); });
+    };
+
+    window.searchAddress = function(query, callbackName, userLat, userLng) {
+      var url = window.API_BASE + '/geocode/search?q=' + encodeURIComponent(query) + '&limit=5';
+      if (userLat && userLng) url += '&lat=' + userLat + '&lng=' + userLng;
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { window[callbackName](JSON.stringify(d.results||[])); })
+        .catch(function() { window[callbackName]('[]'); });
+    };
+
+    window.getRoute = function(fromLat, fromLng, toLat, toLng, callback) {
+      fetch(window.API_BASE + '/geocode/route?fromLat='+fromLat+'&fromLng='+fromLng+'&toLat='+toLat+'&toLng='+toLng)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { callback(d); })
+        .catch(function() { callback(null); });
+    };
+
+    // Manzil tanlash xaritasi - search + icon bilan
+    window.initPickerMap = function(containerId, lat, lng, isDark, isFrom, onPickCallback) {
+      window.loadYandexMaps(function() {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+
+        var pickerMap = new ymaps.Map(containerId, {
+          center: [lat || 41.2995, lng || 69.2401],
+          zoom: 15,
+          controls: [],
+          type: 'yandex#map',
+        });
+
+        if (isDark) {
+          pickerMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }
+
+        var pinPreset = isFrom ? 'islands#blueDeliveryCircleIcon' : 'islands#redCircleIcon';
+        var pin = new ymaps.Placemark(
+          [lat || 41.2995, lng || 69.2401],
+          {},
+          { preset: pinPreset }
+        );
+        pickerMap.geoObjects.add(pin);
+        pickerMap.behaviors.enable('scrollZoom');
+
+        function doReverseGeocode(rlat, rlng) {
+          fetch(window.API_BASE + '/geocode/reverse?lat=' + rlat + '&lng=' + rlng)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (onPickCallback) {
+                onPickCallback(d.city||'', d.street||'', d.fullAddr||'', rlat, rlng);
+              }
+            }).catch(function() {});
+        }
+
+        // Bosgan joyga pin
+        pickerMap.events.add('click', function(e) {
+          var coords = e.get('coords');
+          pin.geometry.setCoordinates(coords);
+          doReverseGeocode(coords[0], coords[1]);
+        });
+
+        // Search
+        window['pickerSearch_' + containerId] = function(query) {
+          fetch(window.API_BASE + '/geocode/search?q=' + encodeURIComponent(query) + '&limit=1')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (d.results && d.results.length > 0) {
+                var first = d.results[0];
+                pickerMap.setCenter([first.lat, first.lng], 16, { duration: 500 });
+                pin.geometry.setCoordinates([first.lat, first.lng]);
+                if (onPickCallback) {
+                  onPickCallback(first.city||'', first.address||'', first.name||'', first.lat, first.lng);
+                }
+              }
+            });
+        };
+
+        window['pickerMap_' + containerId] = pickerMap;
+      });
+    };
+
+    // Haversine formula - km hisoblash
+    window.calcDistance = function(lat1, lng1, lat2, lng2) {
+      var R = 6371;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLng = (lng2 - lng1) * Math.PI / 180;
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    };
+
+    // A→B chiziq ko'rsatish
+    window.drawRoute = function(fromLat, fromLng, toLat, toLng, isDark) {
+      if (!window.goWayMap) return;
+      window.loadYandexMaps(function() {
+        // Eski route objectlarni tozalash
+        window.goWayMap.geoObjects.removeAll();
+
+        // A nuqta - truck icon
+        var fromPin = new ymaps.Placemark([fromLat, fromLng], {
+          balloonContent: 'Qayerdan'
+        }, {
+          preset: 'islands#blueDeliveryCircleIcon'
+        });
+
+        // B nuqta - finish icon  
+        var toPin = new ymaps.Placemark([toLat, toLng], {
+          balloonContent: 'Qayerga'
+        }, {
+          preset: 'islands#redCircleIcon'
+        });
+
+        // Chiziq
+        var polyline = new ymaps.Polyline(
+          [[fromLat, fromLng], [toLat, toLng]],
+          {},
+          {
+            strokeColor: isDark ? '#3b82f6' : '#1e3a8a',
+            strokeWidth: 4,
+            strokeOpacity: 0.8
+          }
+        );
+
+        window.goWayMap.geoObjects.add(polyline);
+        window.goWayMap.geoObjects.add(fromPin);
+        window.goWayMap.geoObjects.add(toPin);
+
+        // Ikala nuqtani ko'rsatadigan zoom
+        window.goWayMap.setBounds(
+          [[Math.min(fromLat,toLat)-0.02, Math.min(fromLng,toLng)-0.02],
+           [Math.max(fromLat,toLat)+0.02, Math.max(fromLng,toLng)+0.02]],
+          { checkZoomRange: true, duration: 500 }
+        );
+      });
+    };
+
+    // A→B chiziqni tozalash
+    window.clearRoute = function() {
+      if (window.goWayMap) window.goWayMap.geoObjects.removeAll();
+    };
+
+    // Modal ichidagi xarita
+    window.initOrderMap = function(containerId, lat, lng, isDark) {
+      window.loadYandexMaps(function() {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (window.orderMap) {
+          try { window.orderMap.destroy(); } catch(e) {}
+        }
+
+        window.orderMap = new ymaps.Map(containerId, {
+          center: [lat || 41.2995, lng || 69.2401],
+          zoom: 13,
+          controls: ['zoomControl'],
+          type: 'yandex#map',
+        });
+
+        if (isDark) {
+          window.orderMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }
+
+        window.orderMap.behaviors.enable('scrollZoom');
+        window.orderMap.behaviors.enable('drag');
+      });
+    };
+
+    // Modal xaritasida A→B ko'rsatish
+    window.drawOrderRoute = function(fromLat, fromLng, toLat, toLng, isDark) {
+      if (!window.orderMap) return;
+      window.loadYandexMaps(function() {
+        window.orderMap.geoObjects.removeAll();
+
+        // A - truck icon
+        var fromPin = new ymaps.Placemark([fromLat, fromLng],
+          { balloonContent: 'Qayerdan' },
+          { preset: 'islands#blueDeliveryCircleIcon' }
+        );
+
+        // B - finish flag
+        var toPin = new ymaps.Placemark([toLat, toLng],
+          { balloonContent: 'Qayerga' },
+          { preset: 'islands#darkGreenFlagCircleIcon' }
+        );
+
+        // Yo'l chiziq
+        var polyline = new ymaps.Polyline(
+          [[fromLat, fromLng], [toLat, toLng]],
+          {},
+          {
+            strokeColor: '#3b82f6',
+            strokeWidth: 5,
+            strokeOpacity: 0.85,
+            strokeStyle: 'solid',
+          }
+        );
+
+        window.orderMap.geoObjects.add(polyline);
+        window.orderMap.geoObjects.add(fromPin);
+        window.orderMap.geoObjects.add(toPin);
+
+        // Ikala nuqta ko'rinadigan zoom
+        var bounds = [
+          [Math.min(fromLat, toLat) - 0.05, Math.min(fromLng, toLng) - 0.05],
+          [Math.max(fromLat, toLat) + 0.05, Math.max(fromLng, toLng) + 0.05]
+        ];
+        window.orderMap.setBounds(bounds, { checkZoomRange: true, duration: 600 });
+      });
+    };
+
+    // Faqat A nuqta (qayerdan) ko'rsatish
+    window.showFromPin = function(lat, lng) {
+      if (!window.orderMap) return;
+      window.orderMap.geoObjects.removeAll();
+      var pin = new ymaps.Placemark([lat, lng],
+        { balloonContent: 'Qayerdan' },
+        { preset: 'islands#blueDeliveryCircleIcon' }
+      );
+      window.orderMap.geoObjects.add(pin);
+      window.orderMap.setCenter([lat, lng], 14, { duration: 400 });
+    };
+
+    // Client main map ni belgilash
+    window.setClientMainMap = function(containerId) {
+      window.clientMainMap = window['map_' + containerId] || window.clientMainMap;
+    };
+
+    // Client asosiy xarita
+    window.initMainMap = function(containerId, lat, lng, isDark) {
+      window.loadYandexMaps(function() {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        if (window.clientMainMap) {
+          try { window.clientMainMap.destroy(); } catch(e) {}
+        }
+        window.clientMainMap = new ymaps.Map(containerId, {
+          center: [lat || 41.2995, lng || 69.2401],
+          zoom: 14,
+          controls: ['zoomControl', 'geolocationControl'],
+          type: 'yandex#map',
+        });
+        if (isDark) {
+          window.clientMainMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }
+        window.clientMainMap.behaviors.enable('scrollZoom');
+
+        // Joriy joylashuv markeri
+        var myPin = new ymaps.Placemark([lat || 41.2995, lng || 69.2401], {},
+          { preset: 'islands#blueCircleDotIcon' });
+        window.clientMainMap.geoObjects.add(myPin);
+        window.clientMainMyPin = myPin;
+      });
+    };
+
+    // OSRM orqali real yo'l marshrut olish
+    window.getOsrmRoute = function(fromLat, fromLng, toLat, toLng, callback) {
+      var url = 'https://router.project-osrm.org/route/v1/driving/' +
+        fromLng + ',' + fromLat + ';' + toLng + ',' + toLat +
+        '?overview=full&geometries=geojson';
+      
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+            var coords = data.routes[0].geometry.coordinates;
+            var distanceKm = Math.round(data.routes[0].distance / 100) / 10;
+            var durationMin = Math.round(data.routes[0].duration / 60);
+            // GeoJSON [lng, lat] → Yandex [lat, lng]
+            var yandexCoords = coords.map(function(c) { return [c[1], c[0]]; });
+            callback(yandexCoords, distanceKm, durationMin);
+          } else {
+            callback(null, null, null);
+          }
+        })
+        .catch(function() { callback(null, null, null); });
+    };
+
+    // Real yo'l marshrut chizish (OSRM + Yandex Maps)
+    window.drawRealRoute = function(fromLat, fromLng, toLat, toLng, isDark, onRouteCallback) {
+      var map = window.clientMainMap;
+      if (!map) return;
+      window.loadYandexMaps(function() {
+        map.geoObjects.removeAll();
+
+        window.getOsrmRoute(fromLat, fromLng, toLat, toLng, function(coords, distKm, timeMin) {
+          // A nuqta - truck
+          var fromPin = new ymaps.Placemark([fromLat, fromLng],
+            { balloonContent: 'Qayerdan' },
+            { preset: 'islands#blueDeliveryCircleIcon' }
+          );
+          // B nuqta - flag
+          var toPin = new ymaps.Placemark([toLat, toLng],
+            { balloonContent: 'Qayerga' },
+            { preset: 'islands#darkGreenFlagCircleIcon' }
+          );
+
+          map.geoObjects.add(fromPin);
+          map.geoObjects.add(toPin);
+
+          if (coords && coords.length > 0) {
+            // OSRM yo'l bo'ylab chiziq — Yandex kabi
+            var polyline = new ymaps.Polyline(coords, {},
+              {
+                strokeColor: isDark ? '#2563eb' : '#1d4ed8',
+                strokeWidth: 8,
+                strokeOpacity: 1,
+                strokeLineJoin: 'round',
+                strokeLineCap: 'round',
+              }
+            );
+            // Oq border chiziq (yo'l chegarasi)
+            var polylineBorder = new ymaps.Polyline(coords, {},
+              {
+                strokeColor: '#ffffff',
+                strokeWidth: 12,
+                strokeOpacity: 0.4,
+                strokeLineJoin: 'round',
+                strokeLineCap: 'round',
+              }
+            );
+            map.geoObjects.add(polylineBorder);
+            map.geoObjects.add(polyline);
+
+            // Bounds
+            var lats = coords.map(function(c) { return c[0]; });
+            var lngs = coords.map(function(c) { return c[1]; });
+            map.setBounds([
+              [Math.min.apply(null, lats) - 0.02, Math.min.apply(null, lngs) - 0.02],
+              [Math.max.apply(null, lats) + 0.02, Math.max.apply(null, lngs) + 0.02]
+            ], { checkZoomRange: true, duration: 600 });
+          } else {
+            // Fallback: to'g'ri chiziq
+            var line = new ymaps.Polyline([[fromLat, fromLng], [toLat, toLng]], {},
+              { strokeColor: '#3b82f6', strokeWidth: 5, strokeOpacity: 0.85 });
+            map.geoObjects.add(line);
+            map.setBounds([
+              [Math.min(fromLat,toLat)-0.05, Math.min(fromLng,toLng)-0.05],
+              [Math.max(fromLat,toLat)+0.05, Math.max(fromLng,toLng)+0.05]
+            ], { checkZoomRange: true, duration: 600 });
+          }
+
+          if (onRouteCallback) onRouteCallback(distKm, timeMin);
+        });
+      });
+    };
+
+    // Picker xaritasida ham OSRM marshrut
+    window.drawPickerRoute = function(mapKey, fromLat, fromLng, toLat, toLng, isDark) {
+      var map = window['pickerMap_' + mapKey];
+      if (!map) return;
+      window.loadYandexMaps(function() {
+        map.geoObjects.removeAll();
+        var fromPin = new ymaps.Placemark([fromLat, fromLng], {},
+          { preset: 'islands#blueDeliveryCircleIcon' });
+        var toPin = new ymaps.Placemark([toLat, toLng], {},
+          { preset: 'islands#darkGreenFlagCircleIcon' });
+        map.geoObjects.add(fromPin);
+        map.geoObjects.add(toPin);
+
+        window.getOsrmRoute(fromLat, fromLng, toLat, toLng, function(coords) {
+          if (coords) {
+            var polyline = new ymaps.Polyline(coords, {},
+              { strokeColor: '#3b82f6', strokeWidth: 5, strokeOpacity: 0.9 });
+            map.geoObjects.add(polyline);
+            var lats = coords.map(function(c) { return c[0]; });
+            var lngs = coords.map(function(c) { return c[1]; });
+            map.setBounds([
+              [Math.min.apply(null, lats)-0.02, Math.min.apply(null, lngs)-0.02],
+              [Math.max.apply(null, lats)+0.02, Math.max.apply(null, lngs)+0.02]
+            ], { checkZoomRange: true, duration: 500 });
+          }
+        });
+      });
+    };
+
+    // Client uchun pin qo'yish (qayerga)
+    window.initClientMap = function(containerId, lat, lng, isDark, onPinCallback) {
+      window.loadYandexMaps(function() {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        if (window.goWayMap) {
+          try { window.goWayMap.destroy(); } catch(e) {}
+        }
+
+        window.goWayMap = new ymaps.Map(containerId, {
+          center: [lat || 41.2995, lng || 69.2401],
+          zoom: 14,
+          controls: [],
+          type: 'yandex#map',
+        });
+
+        if (isDark) {
+          window.goWayMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }
+
+        // Markaziy pin (qayerga)
+        window.clientPinPlacemark = new ymaps.Placemark(
+          [lat || 41.2995, lng || 69.2401],
+          {},
+          { preset: 'islands#redDotIcon', iconColor: '#dc2626' }
+        );
+        window.goWayMap.geoObjects.add(window.clientPinPlacemark);
+        window.goWayMap.behaviors.enable('scrollZoom');
+
+        // Xarita siljiganda pin manzilini olish
+        window.goWayMap.events.add('boundschange', function() {
+          var center = window.goWayMap.getCenter();
+          if (window.clientPinPlacemark) {
+            window.clientPinPlacemark.geometry.setCoordinates(center);
+          }
+          // Manzilni olish
+          ymaps.geocode(center, { results: 1 }).then(function(res) {
+            var obj = res.geoObjects.get(0);
+            if (obj && onPinCallback) {
+              var city = obj.getLocalities()[0] || obj.getAdministrativeAreas()[0] || '';
+              var addr = obj.getThoroughfare() + (obj.getPremise() ? ', ' + obj.getPremise() : '');
+              onPinCallback(city, addr, center[0], center[1]);
+            }
+          });
+        });
+      });
+    };
+
+    // Flutter dan dark mode xabar olish
+    window.setMapDarkMode = function(isDark) {
+      window.isDarkMode = isDark;
+      if (window.goWayMap) {
+        if (isDark) {
+          window.goWayMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        } else {
+          window.goWayMap.panes.get('ground').getElement().style.filter = '';
+        }
+      }
+    };
+
+    window.initYandexMap = function(containerId, lat, lng, isDark) {
+      window.loadYandexMaps(function() {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        if (window.goWayMap) {
+          try { window.goWayMap.destroy(); } catch(e) {}
+        }
+
+        window.goWayMap = new ymaps.Map(containerId, {
+          center: [lat || 41.2995, lng || 69.2401],
+          zoom: 14,
+          controls: [],
+          type: 'yandex#map',
+        });
+
+        // Dark mode
+        if (isDark) {
+          window.goWayMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }
+
+        window.driverPlacemark = new ymaps.Placemark(
+          [lat || 41.2995, lng || 69.2401],
+          {},
+          { preset: 'islands#blueCircleDotIcon', iconColor: '#2563EB' }
+        );
+        window.goWayMap.geoObjects.add(window.driverPlacemark);
+        window.goWayMap.behaviors.enable('scrollZoom');
+      });
+    };
+
+    window.updateDriverLocation = function(lat, lng) {
+      if (window.driverPlacemark) {
+        window.driverPlacemark.geometry.setCoordinates([lat, lng]);
+      }
+      if (window.goWayMap) {
+        window.goWayMap.setCenter([lat, lng], window.goWayMap.getZoom(), {
+          duration: 400, timingFunction: 'ease-in-out'
+        });
+      }
+    };
+
+    window.goToMyLocation = function() {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(function(pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        if (window.goWayMap) {
+          window.goWayMap.setCenter([lat, lng], 15, {
+            duration: 500, timingFunction: 'ease-in-out'
+          });
+        }
+        if (window.myLocationPlacemark) {
+          window.myLocationPlacemark.geometry.setCoordinates([lat, lng]);
+        } else {
+          window.myLocationPlacemark = new ymaps.Placemark(
+            [lat, lng], {},
+            { preset: 'islands#greenCircleDotIcon', iconColor: '#22C55E' }
+          );
+          if (window.goWayMap) window.goWayMap.geoObjects.add(window.myLocationPlacemark);
+        }
+      });
+    };
+
+    window.zoomIn = function() {
+      if (window.goWayMap) {
+        window.goWayMap.setZoom(Math.min(window.goWayMap.getZoom() + 1, 21), { duration: 200 });
+      }
+    };
+
+    window.zoomOut = function() {
+      if (window.goWayMap) {
+        window.goWayMap.setZoom(Math.max(window.goWayMap.getZoom() - 1, 1), { duration: 200 });
+      }
+    };
+
+    window.setMapType = function(type) {
+      if (!window.goWayMap) return;
+      if (type === 'map') {
+        window.goWayMap.setType('yandex#map');
+      } else if (type === 'satellite') {
+        window.goWayMap.setType('yandex#satellite');
+      } else if (type === '3d') {
+        window.goWayMap.setType('yandex#hybrid');
+        window.goWayMap.setZoom(17, { duration: 500 });
+      }
+      // Dark mode ni qayta qo'llamiz
+      if (window.isDarkMode && type === 'map') {
+        setTimeout(function() {
+          window.goWayMap.panes.get('ground').getElement().style.filter =
+            'invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.1)';
+        }, 300);
+      }
+    };
+  </script>
+</body>
+</html>
