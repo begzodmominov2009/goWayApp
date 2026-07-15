@@ -56,7 +56,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: Icons.account_balance_wallet_outlined,
             label: AppStrings.get('wallet', locale),
-            subtitle: AppStrings.get('wallet_subtitle', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -66,7 +65,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: Icons.receipt_long_outlined,
             label: AppStrings.get('order_history_title', locale),
-            subtitle: AppStrings.get('order_history_subtitle', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -76,7 +74,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: Icons.notifications_outlined,
             label: AppStrings.get('notifications', locale),
-            subtitle: AppStrings.get('notifications_subtitle', locale),
             badgeCount: _unreadCount,
             isDark: isDark,
             onTap: () {
@@ -87,7 +84,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: Icons.person_outline,
             label: AppStrings.get('profile', locale),
-            subtitle: AppStrings.get('profile_subtitle', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -98,7 +94,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: Icons.language_outlined,
             label: AppStrings.get('language', locale),
-            subtitle: AppStrings.get('language_subtitle', locale),
             value: locale == 'uz' ? 'O\'zbek' : locale == 'ru' ? 'Русский' : 'English',
             isDark: isDark,
             onTap: () => _showLanguagePicker(context, ref),
@@ -106,7 +101,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           _MenuTile(
             icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
             label: AppStrings.get('theme', locale),
-            subtitle: AppStrings.get('theme_subtitle', locale),
             value: themeMode == ThemeMode.dark
                 ? AppStrings.get('theme_dark', locale)
                 : themeMode == ThemeMode.light
@@ -204,7 +198,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
 class _MenuTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String? subtitle;
   final String? value;
   final int? badgeCount;
   final bool isDark;
@@ -212,7 +205,7 @@ class _MenuTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _MenuTile({
-    required this.icon, required this.label, this.subtitle, this.value, this.badgeCount,
+    required this.icon, required this.label, this.value, this.badgeCount,
     required this.isDark, this.color, required this.onTap,
   });
 
@@ -223,6 +216,8 @@ class _MenuTile extends StatelessWidget {
     final hasBadge = badgeCount != null && badgeCount! > 0;
 
     return ListTile(
+      dense: true,
+      visualDensity: VisualDensity.compact,
       onTap: onTap,
       leading: Stack(
         clipBehavior: Clip.none,
@@ -245,9 +240,6 @@ class _MenuTile extends StatelessWidget {
         ],
       ),
       title: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
-      subtitle: subtitle != null
-          ? Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: textSecondary))
-          : null,
       trailing: value != null
           ? Text(value!, style: TextStyle(fontSize: 13, color: textSecondary))
           : Icon(Icons.chevron_right, size: 18, color: textSecondary),

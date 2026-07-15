@@ -34,17 +34,27 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   }
 
   // Profil rasmini (avatar) tanlash — ixtiyoriy, tanlanmasa hech narsa
-  // yuborilmaydi va standart (harf) avatar ko'rsatilaveradi.
+  // yuborilmaydi va standart (harf) avatar ko'rsatilaveradi. Xato bo'lsa,
+  // tanlangan (hali saqlanmagan) rasm bekor qilinib, foydalanuvchiga
+  // SnackBar orqali xabar beriladi.
   Future<void> _pickAvatar() async {
     final picker = ImagePicker();
     final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (img == null) return;
     final bytes = await img.readAsBytes();
+    if (!mounted) return;
     setState(() { _avatarBytes = bytes; _avatarUploading = true; });
+    final locale = ref.read(localeProvider).languageCode;
     try {
       await ref.read(driverRepositoryProvider).uploadAvatar(bytes, img.name);
       await _load();
     } catch (_) {
+      if (mounted) {
+        setState(() => _avatarBytes = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.get('avatar_upload_failed', locale)), backgroundColor: AppTheme.errorColor),
+        );
+      }
     } finally {
       if (mounted) setState(() => _avatarUploading = false);
     }
@@ -151,14 +161,37 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Container(
-                        width: 56, height: 56,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+                      GestureDetector(
+                        onTap: _avatarUploading ? null : _pickAvatar,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 56, height: 56,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+                              ),
+                              child: _avatarContent(56, initialsColor: Colors.white),
+                            ),
+                            Positioned(
+                              right: -2, bottom: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: bg, width: 2),
+                                ),
+                                child: _avatarUploading
+                                    ? const SizedBox(width: 10, height: 10,
+                                        child: AppLoadingIndicator(strokeWidth: 1.5, color: Colors.white))
+                                    : const Icon(Icons.edit, size: 10, color: Colors.white),
+                              ),
+                            ),
+                          ],
                         ),
-                        child: _avatarContent(56, initialsColor: Colors.white),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -206,56 +239,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Profil rasmi (ixtiyoriy)
-                Center(
-                  child: Column(
-                    children: [
-                      GestureDetector(
-                        onTap: _avatarUploading ? null : _pickAvatar,
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 88, height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isDark ? AppTheme.darkSurface : Colors.white,
-                                border: Border.all(color: border, width: 1),
-                              ),
-                              child: _avatarContent(88, initialsColor: AppTheme.primaryColor),
-                            ),
-                            Positioned(
-                              right: 0, bottom: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: bg, width: 2),
-                                ),
-                                child: _avatarUploading
-                                    ? const SizedBox(width: 12, height: 12,
-                                        child: AppLoadingIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Icon(Icons.edit, size: 14, color: Colors.white),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(AppStrings.get('profile_photo_optional', locale),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
-                      const SizedBox(height: 2),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(AppStrings.get('profile_photo_hint', locale),
-                            style: TextStyle(fontSize: 11, color: textSecondary),
-                            textAlign: TextAlign.center),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
                 // Otish yo'llari — Hamyon, Buyurtmalar tarixi, Bildirishnomalar
                 Container(
                   decoration: BoxDecoration(
@@ -268,7 +251,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                       icon: Icons.account_balance_wallet_outlined,
                       iconColor: const Color(0xFF8B5CF6),
                       label: AppStrings.get('wallet', locale),
-                      subtitle: AppStrings.get('wallet_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.driverWallet),
                     ),
@@ -277,7 +259,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                       icon: Icons.receipt_long_outlined,
                       iconColor: AppTheme.primaryColor,
                       label: AppStrings.get('order_history_title', locale),
-                      subtitle: AppStrings.get('order_history_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.driverHistory),
                     ),
@@ -286,7 +267,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                       icon: Icons.notifications_outlined,
                       iconColor: AppTheme.successColor,
                       label: AppStrings.get('notifications', locale),
-                      subtitle: AppStrings.get('notifications_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.notifications),
                     ),
@@ -361,7 +341,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                     _MenuItem(icon: Icons.language_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('language', locale),
-                        subtitle: AppStrings.get('language_subtitle', locale),
                         value: locale == 'uz' ? 'O\'zbek' : locale == 'ru' ? 'Русский' : 'English',
                         isDark: isDark, onTap: _showLanguageSheet),
                     Divider(height: 1, color: border, indent: 68),
@@ -369,7 +348,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                         icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('theme', locale),
-                        subtitle: AppStrings.get('theme_subtitle', locale),
                         value: themeMode == ThemeMode.dark
                             ? AppStrings.get('theme_dark', locale)
                             : themeMode == ThemeMode.light
@@ -380,13 +358,11 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                     _MenuItem(icon: Icons.lock_outline,
                         iconColor: textSecondary,
                         label: AppStrings.get('change_password', locale),
-                        subtitle: AppStrings.get('change_password_subtitle', locale),
                         isDark: isDark, onTap: _showChangePasswordSheet),
                     Divider(height: 1, color: border, indent: 68),
                     _MenuItem(icon: Icons.description_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('terms', locale),
-                        subtitle: AppStrings.get('terms_subtitle', locale),
                         isDark: isDark, onTap: () => context.push(AppRoutes.terms)),
                   ]),
                 ),
@@ -1504,17 +1480,18 @@ class _MenuItem extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String label;
-  final String? subtitle;
   final String? value;
   final bool isDark;
   final VoidCallback? onTap;
   const _MenuItem({required this.icon, required this.iconColor, required this.label,
-      this.subtitle, this.value, required this.isDark, this.onTap});
+      this.value, required this.isDark, this.onTap});
   @override
   Widget build(BuildContext context) {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     return ListTile(
+      dense: true,
+      visualDensity: VisualDensity.compact,
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
@@ -1526,9 +1503,6 @@ class _MenuItem extends StatelessWidget {
         child: Icon(icon, size: 19, color: iconColor),
       ),
       title: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
-      subtitle: subtitle != null
-          ? Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: textSecondary))
-          : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

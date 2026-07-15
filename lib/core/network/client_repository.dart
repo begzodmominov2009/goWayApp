@@ -137,4 +137,53 @@ class ClientRepository {
       'newPassword': password,
     });
   }
+
+  // Saqlangan manzillar
+  Future<List<Map<String, dynamic>>> getSavedAddresses() async {
+    final res = await _dio.get('/client/saved-addresses');
+    final list = res.data['data'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<Map<String, dynamic>> saveSavedAddress({
+    required String name,
+    required String address,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final res = await _dio.post('/client/saved-addresses', data: {
+      'name': name,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+    });
+    return Map<String, dynamic>.from(res.data['data']);
+  }
+
+  Future<void> updateSavedAddress(
+    String id, {
+    required String name,
+    required String address,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await _dio.put('/client/saved-addresses/$id', data: {
+      'name': name,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+    });
+  }
+
+  Future<void> deleteSavedAddress(String id) async {
+    await _dio.delete('/client/saved-addresses/$id');
+  }
+
+  // Profil rasmini (avatar) yuklash
+  Future<void> updateAvatar(Uint8List bytes, String fileName) async {
+    final formData = FormData.fromMap({
+      'avatar': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    await _dio.post('/client/avatar', data: formData);
+  }
 }

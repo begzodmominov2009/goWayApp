@@ -15,6 +15,7 @@ import '../../features/client/order/screens/order_detail_screen.dart';
 import '../../features/client/order/screens/select_address_screen.dart';
 import '../../features/client/order/screens/order_details_screen.dart';
 import '../../features/client/order/screens/active_order_details_screen.dart';
+import '../../features/client/order/screens/saved_addresses_screen.dart';
 import '../../shared/widgets/place.dart';
 import '../../features/client/profile/screens/client_profile_screen.dart';
 import '../../features/client/settings/screens/client_settings_screen.dart';
@@ -51,6 +52,7 @@ class AppRoutes {
   static const clientSelectAddress = '/client/select-address';
   static const clientOrderDetails = '/client/order-details';
   static const clientActiveOrderDetails = '/client/active-order-details';
+  static const clientSavedAddresses = '/client/saved-addresses';
 
   static const driverHome = '/driver/home';
   static const driverOrderDetail = '/driver/order/:id';
@@ -235,6 +237,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             state,
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.clientSavedAddresses,
+        pageBuilder: (context, state) => _slidePage(const SavedAddressesScreen(), state),
       ),
 
       // Driver

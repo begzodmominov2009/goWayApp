@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geocode_repository.dart';
+import '../../../../core/network/client_repository.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -50,6 +51,9 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
   Timer? _fromTimer;
   Timer? _toTimer;
 
+  List<Map<String, dynamic>> _savedAddresses = [];
+  final Set<String> _savedPlaceKeys = {};
+
   bool get _allFilled => _fromPlace != null && _toPlace != null;
 
   @override
@@ -65,7 +69,17 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_toFocus);
     });
+    _loadSavedAddresses();
   }
+
+  Future<void> _loadSavedAddresses() async {
+    try {
+      final list = await ref.read(clientRepositoryProvider).getSavedAddresses();
+      if (mounted) setState(() => _savedAddresses = list);
+    } catch (_) {}
+  }
+
+  String _placeKey(Place p) => '${p.lat.toStringAsFixed(5)},${p.lng.toStringAsFixed(5)}';
 
   @override
   void dispose() {
@@ -160,6 +174,52 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
         }
       });
     });
+  }
+
+  Future<void> _showQuickSaveDialog(Place place) async {
+    if (_savedPlaceKeys.contains(_placeKey(place))) return;
+    final locale = ref.read(localeProvider).languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final nameCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(AppStrings.get('quick_save_address_title', locale),
+            style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: nameCtrl,
+          style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
+          decoration: InputDecoration(hintText: AppStrings.get('address_name_optional_hint', locale)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(AppStrings.get('cancel', locale)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(AppStrings.get('save', locale)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(clientRepositoryProvider).saveSavedAddress(
+            name: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : place.name,
+            address: place.address.isNotEmpty ? place.address : place.name,
+            latitude: place.lat,
+            longitude: place.lng,
+          );
+      if (!mounted) return;
+      setState(() => _savedPlaceKeys.add(_placeKey(place)));
+      _loadSavedAddresses();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.get('address_saved_snackbar', locale)), backgroundColor: AppTheme.successColor),
+      );
+    } catch (_) {}
   }
 
   // Har ikkala chegarani ham InputBorder.none qilib qo'yish shart —
@@ -281,6 +341,62 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
             ),
             const SizedBox(height: 8),
 
+            // Saqlangan manzillar — tezkor kirish uchun qisqa ro'yxat,
+            // to'liq boshqaruv esa alohida SavedAddressesScreen'da
+            if (_savedAddresses.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(AppStrings.get('saved_places', locale),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _savedAddresses.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (ctx, i) {
+                          final item = _savedAddresses[i];
+                          final label = (item['name'] as String?)?.isNotEmpty == true
+                              ? item['name'] as String
+                              : (item['address'] as String? ?? '');
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () {
+                              final place = Place(
+                                name: item['name'] as String? ?? '',
+                                address: item['address'] as String? ?? '',
+                                lat: (item['latitude'] as num).toDouble(),
+                                lng: (item['longitude'] as num).toDouble(),
+                              );
+                              _selectResult(place, isFrom: _fromFocus.hasFocus);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: border),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                const Icon(Icons.bookmark, size: 14, color: AppTheme.primaryColor),
+                                const SizedBox(width: 6),
+                                Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+
             // Qidiruv natijalari
             if (showFrom || showTo)
               Expanded(
@@ -330,6 +446,14 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
                                             style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor, fontWeight: FontWeight.w700),
                                           ),
                                         ),
+                                      IconButton(
+                                        icon: Icon(
+                                          _savedPlaceKeys.contains(_placeKey(place)) ? Icons.bookmark : Icons.bookmark_border,
+                                          size: 18,
+                                          color: AppTheme.primaryColor,
+                                        ),
+                                        onPressed: () => _showQuickSaveDialog(place),
+                                      ),
                                     ]),
                                   ),
                                 ),
