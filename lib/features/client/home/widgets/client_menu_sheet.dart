@@ -7,6 +7,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
 import '../../../../core/network/notification_repository.dart';
+import '../../../../core/providers/active_order_provider.dart';
 import '../../../../core/router/app_router.dart';
 
 class ClientMenuSheet extends ConsumerStatefulWidget {
@@ -37,6 +38,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
     final themeMode = ref.watch(themeModeProvider);
+    final activeOrder = ref.watch(activeOrderProvider);
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
 
@@ -53,9 +55,28 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
               decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 12),
 
+          if (activeOrder != null)
+            _MenuTile(
+              icon: Icons.local_shipping_outlined,
+              label: AppStrings.get('active_order', locale),
+              subtitle: AppStrings.get('active_order_subtitle', locale),
+              isDark: isDark,
+              onTap: () {
+                Navigator.pop(context);
+                context.push(
+                  AppRoutes.clientActiveOrderDetails,
+                  extra: {
+                    'order': activeOrder.order,
+                    'distKm': activeOrder.distKm,
+                    'timeMin': activeOrder.timeMin,
+                  },
+                );
+              },
+            ),
           _MenuTile(
             icon: Icons.receipt_long_outlined,
-            label: 'Buyurtmalarim',
+            label: AppStrings.get('my_orders', locale),
+            subtitle: AppStrings.get('my_orders_subtitle', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -64,7 +85,8 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
           ),
           _MenuTile(
             icon: Icons.notifications_outlined,
-            label: 'Bildirishnomalar',
+            label: AppStrings.get('notifications', locale),
+            subtitle: AppStrings.get('notifications_subtitle', locale),
             badgeCount: _unreadCount,
             isDark: isDark,
             onTap: () {
@@ -74,7 +96,8 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
           ),
           _MenuTile(
             icon: Icons.person_outline,
-            label: 'Profil',
+            label: AppStrings.get('profile', locale),
+            subtitle: AppStrings.get('profile_subtitle', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -84,14 +107,16 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
           Divider(height: 1, color: border, indent: 20, endIndent: 20),
           _MenuTile(
             icon: Icons.language_outlined,
-            label: 'Til',
-            value: locale == 'uz' ? 'O\'zbek' : locale == 'ru' ? 'Русский' : 'English',
+            label: AppStrings.get('language', locale),
+            subtitle: AppStrings.get('language_subtitle', locale),
+            value: AppStrings.get('native_language_name', locale),
             isDark: isDark,
             onTap: () => _showLanguagePicker(context, ref),
           ),
           _MenuTile(
             icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-            label: 'Tema',
+            label: AppStrings.get('theme', locale),
+            subtitle: AppStrings.get('theme_subtitle', locale),
             value: themeMode == ThemeMode.dark
                 ? AppStrings.get('theme_dark', locale)
                 : themeMode == ThemeMode.light
@@ -107,6 +132,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
 
   void _showLanguagePicker(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.read(localeProvider).languageCode;
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
@@ -118,7 +144,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Tilni tanlang', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
+              Text(AppStrings.get('select_language', locale), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
                   color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary)),
               const SizedBox(height: 16),
               ...[('uz', 'O\'zbek', '🇺🇿'), ('ru', 'Русский', '🇷🇺'), ('en', 'English', '🇬🇧')].map((item) =>
@@ -157,7 +183,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Temani tanlang', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
+              Text(AppStrings.get('select_theme', locale), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
                   color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary)),
               const SizedBox(height: 16),
               ...[
@@ -188,6 +214,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
 class _MenuTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final String? value;
   final int? badgeCount;
   final bool isDark;
@@ -195,7 +222,7 @@ class _MenuTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _MenuTile({
-    required this.icon, required this.label, this.value, this.badgeCount,
+    required this.icon, required this.label, this.subtitle, this.value, this.badgeCount,
     required this.isDark, this.color, required this.onTap,
   });
 
@@ -228,6 +255,9 @@ class _MenuTile extends StatelessWidget {
         ],
       ),
       title: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
+      subtitle: subtitle != null
+          ? Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: textSecondary))
+          : null,
       trailing: value != null
           ? Text(value!, style: TextStyle(fontSize: 13, color: textSecondary))
           : Icon(Icons.chevron_right, size: 18, color: textSecondary),

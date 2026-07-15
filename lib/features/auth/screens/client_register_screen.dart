@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
@@ -236,7 +237,7 @@ class _ClientRegisterScreenState extends ConsumerState<ClientRegisterScreen> {
                 child: Center(
                   child: _loading
                       ? const SizedBox(width: 22, height: 22,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                          child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2.5))
                       : const Text('Boshlash',
                           style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                 ),

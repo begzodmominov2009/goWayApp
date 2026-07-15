@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
@@ -20,6 +22,8 @@ class ClientProfileScreen extends ConsumerStatefulWidget {
 class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
+
+  Uint8List? _avatarBytes;
 
   @override
   void initState() {
@@ -46,6 +50,44 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     if (parts.isNotEmpty && parts[0].isNotEmpty)
       return parts[0][0].toUpperCase();
     return 'C';
+  }
+
+  // Galereyadan rasm tanlash. MUHIM: ClientRepository'da hozircha avatar
+  // yuklash endpointi yo'q (driver_repository.dart'dagi uploadAvatar()
+  // kabi metod client uchun mavjud emas) — shuning uchun tanlangan rasm
+  // faqat shu sessiya davomida mahalliy ravishda ko'rsatiladi, serverga
+  // yuborilmaydi. Foydalanuvchiga bu holat alohida bildiriladi.
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    if (!mounted) return;
+    setState(() => _avatarBytes = bytes);
+    final locale = ref.read(localeProvider).languageCode;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppStrings.get('avatar_preview_only_notice', locale)), backgroundColor: AppTheme.warningColor),
+    );
+  }
+
+  Widget _avatarContent(double size, {required Color initialsColor}) {
+    if (_avatarBytes != null) {
+      return ClipOval(child: Image.memory(_avatarBytes!, width: size, height: size, fit: BoxFit.cover));
+    }
+    final url = _profile?['avatarUrl'] as String?;
+    if (url != null && url.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          url, width: size, height: size, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Center(
+            child: Text(_initials(), style: TextStyle(fontSize: size * 0.36, fontWeight: FontWeight.w800, color: initialsColor)),
+          ),
+        ),
+      );
+    }
+    return Center(
+      child: Text(_initials(), style: TextStyle(fontSize: size * 0.36, fontWeight: FontWeight.w800, color: initialsColor)),
+    );
   }
 
   @override
@@ -97,7 +139,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLoadingIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -119,12 +161,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                           border: Border.all(
                               color: Colors.white.withOpacity(0.4), width: 2),
                         ),
-                        child: Center(
-                            child: Text(_initials(),
-                                style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white))),
+                        child: _avatarContent(56, initialsColor: Colors.white),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -178,6 +215,53 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Profil rasmi (ixtiyoriy)
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _pickAvatar,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 88, height: 88,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDark ? AppTheme.darkSurface : Colors.white,
+                                border: Border.all(color: border, width: 1),
+                              ),
+                              child: _avatarContent(88, initialsColor: AppTheme.primaryColor),
+                            ),
+                            Positioned(
+                              right: 0, bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: bg, width: 2),
+                                ),
+                                child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(AppStrings.get('profile_photo_optional', locale),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
+                      const SizedBox(height: 2),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(AppStrings.get('profile_photo_hint', locale),
+                            style: TextStyle(fontSize: 11, color: textSecondary),
+                            textAlign: TextAlign.center),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Otish yo'llari — Buyurtmalarim, Bildirishnomalar
                 Container(
                   decoration: BoxDecoration(
@@ -188,14 +272,18 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                   child: Column(children: [
                     _MenuItem(
                       icon: Icons.receipt_long_outlined,
-                      label: 'Buyurtmalarim',
+                      iconColor: AppTheme.primaryColor,
+                      label: AppStrings.get('my_orders', locale),
+                      subtitle: AppStrings.get('my_orders_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.clientOrders),
                     ),
-                    Divider(height: 1, color: border, indent: 48),
+                    Divider(height: 1, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.notifications_outlined,
-                      label: 'Bildirishnomalar',
+                      iconColor: AppTheme.successColor,
+                      label: AppStrings.get('notifications', locale),
+                      subtitle: AppStrings.get('notifications_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.notifications),
                     ),
@@ -222,7 +310,9 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                   child: Column(children: [
                     _MenuItem(
                       icon: Icons.language_outlined,
+                      iconColor: textSecondary,
                       label: AppStrings.get('language', locale),
+                      subtitle: AppStrings.get('language_subtitle', locale),
                       value: locale == 'uz'
                           ? 'O\'zbek'
                           : locale == 'ru'
@@ -231,12 +321,14 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: _showLanguageSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 48),
+                    Divider(height: 1, color: border, indent: 68),
                     _MenuItem(
                       icon: isDark
                           ? Icons.dark_mode_outlined
                           : Icons.light_mode_outlined,
+                      iconColor: textSecondary,
                       label: AppStrings.get('theme', locale),
+                      subtitle: AppStrings.get('theme_subtitle', locale),
                       value: themeMode == ThemeMode.dark
                           ? AppStrings.get('theme_dark', locale)
                           : themeMode == ThemeMode.light
@@ -245,17 +337,21 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: _showThemeSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 48),
+                    Divider(height: 1, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.lock_outline,
+                      iconColor: textSecondary,
                       label: AppStrings.get('change_password', locale),
+                      subtitle: AppStrings.get('change_password_subtitle', locale),
                       isDark: isDark,
                       onTap: _showChangePasswordSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 48),
+                    Divider(height: 1, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.description_outlined,
+                      iconColor: textSecondary,
                       label: AppStrings.get('terms', locale),
+                      subtitle: AppStrings.get('terms_subtitle', locale),
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.terms),
                     ),
@@ -692,53 +788,49 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
 // ===== HELPERS =====
 class _MenuItem extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
   final String label;
+  final String? subtitle;
   final String? value;
   final bool isDark;
   final VoidCallback? onTap;
   const _MenuItem(
       {required this.icon,
+      required this.iconColor,
       required this.label,
+      this.subtitle,
       this.value,
       required this.isDark,
       this.onTap});
   @override
   Widget build(BuildContext context) {
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     return ListTile(
       onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
-        width: 32,
-        height: 32,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
-          borderRadius: BorderRadius.circular(8),
+          color: iconColor.withOpacity(0.12),
+          shape: BoxShape.circle,
         ),
-        child: Icon(icon,
-            size: 16,
-            color:
-                isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+        child: Icon(icon, size: 19, color: iconColor),
       ),
       title: Text(label,
-          style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary)),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
+      subtitle: subtitle != null
+          ? Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: textSecondary))
+          : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (value != null)
-            Text(value!,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: isDark
-                        ? AppTheme.darkTextSecondary
-                        : AppTheme.textSecondary)),
+            Text(value!, style: TextStyle(fontSize: 12, color: textSecondary)),
           const SizedBox(width: 4),
           if (onTap != null)
-            Icon(Icons.chevron_right,
-                size: 16,
-                color:
-                    isDark ? AppTheme.darkTextSecondary : AppTheme.borderColor),
+            Icon(Icons.chevron_right, size: 18, color: textSecondary),
         ],
       ),
     );
@@ -770,7 +862,7 @@ class _GradientButton extends StatelessWidget {
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
+                  child: AppLoadingIndicator(
                       color: Colors.white, strokeWidth: 2))
               : Text(label,
                   style: const TextStyle(

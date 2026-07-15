@@ -5,18 +5,18 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
-import '../../../../core/network/rating_repository.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/place.dart';
-import '../../../../shared/widgets/address_modal.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
-import '../../../../shared/widgets/rating_dialog.dart';
+import '../../../../shared/widgets/driver_avatar.dart';
+import '../../../../core/providers/active_order_provider.dart';
 import '../widgets/client_menu_sheet.dart';
 
 const double _kMinZoom = 3.0;
@@ -57,11 +57,16 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
 
   List<MapObject> _mapObjects = [];
 
+  bool _searching = false;
+  Map<String, dynamic>? _pendingOrder;
+  Offset? _radarScreenPos;
+
   @override
   void initState() {
     super.initState();
     _loadIcons();
     _initLocation();
+    _checkActiveOrderOnStart();
   }
 
   @override
@@ -219,7 +224,32 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
 
   Future<void> _locateMe() async {
     try {
-      final pos = await Geolocator.getCurrentPosition();
+      bool ok = await Geolocator.isLocationServiceEnabled();
+      if (!ok) {
+        if (mounted) _showLocationDeniedNotice();
+        return;
+      }
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+        if (mounted) _showLocationDeniedNotice();
+        return;
+      }
+
+      Position pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+        );
+      } catch (_) {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last == null) rethrow;
+        pos = last;
+      }
+
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(target: Point(latitude: pos.latitude, longitude: pos.longitude), zoom: 15),
@@ -338,28 +368,54 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     );
   }
 
-  void _openAddressModal() {
-    final isDark = _isDark;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (ctx) => AddressModal(
-        isDark: isDark,
-        initialFrom: _fromPlace,
-        fromLat: _fromLat,
-        fromLng: _fromLng,
-        onConfirmed: (from, to) {
-          setState(() { _fromPlace = from; _toPlace = to; });
-          _drawRoute();
-          Future.delayed(const Duration(milliseconds: 280), () {
-            if (mounted) _showOrderDetails();
-          });
-        },
+  Future<void> _centerOnPickupForSearch() async {
+    if (_fromPlace == null) return;
+    _mapController?.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng), zoom: 16),
       ),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.6),
     );
+    await Future.delayed(const Duration(milliseconds: 650));
+    await _updateRadarScreenPos();
+  }
+
+  Future<void> _updateRadarScreenPos() async {
+    if (!_searching || _fromPlace == null || _mapController == null || !mounted) return;
+    try {
+      final sp = await _mapController!.getScreenPoint(
+        Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng),
+      );
+      if (sp != null && mounted) {
+        setState(() => _radarScreenPos = Offset(sp.x, sp.y));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openSelectAddressPage() async {
+    final result = await context.push<Map<String, Place>>(
+      AppRoutes.clientSelectAddress,
+      extra: {
+        'initialFrom': _fromPlace,
+        'fromLat': _fromLat,
+        'fromLng': _fromLng,
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _fromPlace = result['from'];
+      _toPlace = result['to'];
+    });
+    _drawRoute();
+  }
+
+  Future<void> _openOrderDetailsPage() async {
+    if (_fromPlace == null || _toPlace == null) return;
+    final created = await context.push<Map<String, dynamic>>(
+      AppRoutes.clientOrderDetails,
+      extra: {'fromPlace': _fromPlace, 'toPlace': _toPlace},
+    );
+    if (created != null && mounted) _showSearching(created);
   }
 
   void _clearSelection() {
@@ -444,6 +500,20 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     _fitBounds(points);
   }
 
+  Future<void> _checkActiveOrderOnStart() async {
+    try {
+      final orders = await ref.read(clientRepositoryProvider).getOrders();
+      if (orders.isEmpty || !mounted) return;
+      final latest = orders.first;
+      final status = latest['status'] as String;
+      if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
+        setState(() => _activeOrder = latest);
+        _syncActiveOrderProvider();
+        _startTrackingLoop();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _refreshActiveOrder() async {
     try {
       final orders = await ref.read(clientRepositoryProvider).getOrders();
@@ -453,10 +523,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
 
       if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
         setState(() => _activeOrder = latest);
+        _syncActiveOrderProvider();
         await _updateDriverTracking();
       } else if (status == 'DELIVERED' || status == 'COMPLETED') {
         _trackingTimer?.cancel();
         setState(() => _activeOrder = latest);
+        _syncActiveOrderProvider();
       } else if (status == 'CANCELLED') {
         _trackingTimer?.cancel();
         setState(() {
@@ -464,6 +536,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
           _fromPlace = null;
           _toPlace = null;
         });
+        _syncActiveOrderProvider();
         _rebuildMapObjects();
       }
     } catch (_) {}
@@ -501,10 +574,18 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                 if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
                   setState(() => _currentZoom = pos.zoom);
                 }
+                if (_searching && finished) _updateRadarScreenPos();
               },
               mapObjects: _mapObjects,
             ),
           ),
+
+          if (_searching && _radarScreenPos != null)
+            Positioned(
+              left: _radarScreenPos!.dx - 70,
+              top: _radarScreenPos!.dy - 70,
+              child: const IgnorePointer(child: _RadarPulse()),
+            ),
 
           Positioned(
             top: 0, left: 0, right: 0,
@@ -528,7 +609,14 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                             decoration: BoxDecoration(
                               color: surface,
                               shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+                              border: Border.all(color: border, width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
                             child: Icon(Icons.menu, color: textPrimary, size: 23),
                           ),
@@ -536,40 +624,49 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                         const SizedBox(width: 12),
                         Expanded(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
                               color: surface,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 22, height: 22,
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.local_shipping, color: Colors.white, size: 13),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text('GoWay',
-                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                  ],
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: border, width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
                                 ),
-                                if (_currentAddressLabel.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _currentAddressLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 12, color: textSecondary),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 34, height: 34,
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                                    shape: BoxShape.circle,
                                   ),
-                                ],
+                                  child: const Icon(Icons.route_rounded, color: Colors.white, size: 17),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        AppStrings.get('current_location_label', locale),
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.2),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _currentAddressLabel.isNotEmpty ? _currentAddressLabel : 'GoWay',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -672,7 +769,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
 
                   if (_activeOrder != null) ...[
                     GestureDetector(
-                      onTap: _showActiveOrder,
+                      onTap: _openActiveOrderDetailsPage,
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -681,18 +778,102 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                           border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
                         ),
                         child: Row(children: [
-                          Container(width: 8, height: 8,
-                              decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(_activeOrderStatusLabel(locale),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.primaryColor))),
+                          if (_activeOrder!['driver'] != null) ...[
+                            DriverAvatar(driver: _activeOrder!['driver'] as Map<String, dynamic>, size: 36),
+                            const SizedBox(width: 10),
+                          ] else ...[
+                            Container(width: 8, height: 8,
+                                decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_activeOrderStatusLabel(locale),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.primaryColor)),
+                                if (_activeOrder!['driver'] != null)
+                                  Text(
+                                    (_activeOrder!['driver'] as Map<String, dynamic>)['fullName'] as String? ?? '',
+                                    style: TextStyle(fontSize: 11, color: textSecondary),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
                           const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.primaryColor),
                         ]),
                       ),
                     ),
+                  ] else if (_searching && _pendingOrder != null) ...[
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 34, height: 34,
+                          child: AppLoadingIndicator(strokeWidth: 2.6, valueColor: AlwaysStoppedAnimation(AppTheme.primaryColor)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(AppStrings.get('searching_driver', locale),
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textPrimary)),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${AddressHelper.shorten(_fromPlace?.name ?? '')} → ${AddressHelper.shorten(_toPlace?.name ?? '')}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _cancelSearching,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: BorderSide(color: border),
+                              foregroundColor: textSecondary,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(AppStrings.get('cancel_search', locale), maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _showSearchOrderDetails(_pendingOrder!),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: const BorderSide(color: AppTheme.primaryColor),
+                              foregroundColor: AppTheme.primaryColor,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(AppStrings.get('order_details', locale), maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ] else if (_fromPlace != null && _toPlace != null) ...[
                     GestureDetector(
-                      onTap: _openAddressModal,
+                      onTap: _openSelectAddressPage,
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -733,22 +914,30 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                             onPressed: _clearSelection,
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(0, 50),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               side: BorderSide(color: border),
                               foregroundColor: textSecondary,
                             ),
-                            child: Text(AppStrings.get('cancel_selection', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                AppStrings.get('cancel_selection', locale),
+                                maxLines: 1,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           flex: 2,
-                          child: _GradBtn(label: AppStrings.get('place_order', locale), onTap: _showOrderDetails),
+                          child: _GradBtn(label: AppStrings.get('place_order', locale), onTap: _openOrderDetailsPage),
                         ),
                       ],
                     ),
                   ] else
-                    _GradBtn(label: AppStrings.get('enter_address', locale), onTap: _openAddressModal),
+                    _GradBtn(label: AppStrings.get('enter_address', locale), onTap: _openSelectAddressPage),
                   const SizedBox(height: 4),
                 ],
               ),
@@ -771,186 +960,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     }
   }
 
-  void _showOrderDetails() {
-    final isDark = _isDark;
-    final locale = ref.read(localeProvider).languageCode;
-    final surface = isDark ? AppTheme.darkSurface : Colors.white;
-    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-    final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
-
-    final weightCtrl = TextEditingController();
-    final noteCtrl = TextEditingController();
-    String? selectedTruck;
-    List<Map<String, dynamic>> trucks = [];
-    bool loading = false;
-    bool trucksLoading = true;
-    String? error;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) {
-          if (trucksLoading) {
-            ref.read(clientRepositoryProvider).getTrucks().then((t) {
-              trucksLoading = false;
-              setSt(() => trucks = t);
-            });
-          }
-
-          return Padding(
-            padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: Container(width: 36, height: 4,
-                    decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 16),
-
-                Row(children: [
-                  Column(children: [
-                    const Icon(Icons.local_shipping, size: 14, color: AppTheme.primaryColor),
-                    Container(width: 1, height: 12, color: border),
-                    const Icon(Icons.flag, size: 14, color: AppTheme.successColor),
-                  ]),
-                  const SizedBox(width: 10),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(AddressHelper.shorten(_fromPlace?.name ?? ''),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      Text(AddressHelper.shorten(_toPlace?.name ?? ''),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ],
-                  )),
-                ]),
-                const SizedBox(height: 18),
-
-                Text(AppStrings.get('select_vehicle', locale),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
-                const SizedBox(height: 10),
-
-                trucksLoading
-                    ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-                    : SizedBox(
-                        height: 96,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: trucks.fold<Map<String, Map<String, dynamic>>>({}, (map, t) {
-                            final key = t['type'] as String;
-                            if (!map.containsKey(key)) map[key] = t;
-                            return map;
-                          }).values.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 10),
-                          itemBuilder: (ctx2, i) {
-                            final uniqueTrucks = trucks.fold<Map<String, Map<String, dynamic>>>({}, (map, t) {
-                              final key = t['type'] as String;
-                              if (!map.containsKey(key)) map[key] = t;
-                              return map;
-                            }).values.toList();
-                            final t = uniqueTrucks[i];
-                            final selected = selectedTruck == t['type'];
-                            return GestureDetector(
-                              onTap: () => setSt(() => selectedTruck = t['type'] as String),
-                              child: Container(
-                                width: 108,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: selected ? AppTheme.primaryColor.withOpacity(0.1) : bg,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: selected ? AppTheme.primaryColor : border, width: selected ? 2 : 1),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.local_shipping,
-                                        size: 26, color: selected ? AppTheme.primaryColor : textSecondary),
-                                    const SizedBox(height: 8),
-                                    Text(t['name'] as String? ?? t['type'] as String,
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                            color: selected ? AppTheme.primaryColor : textPrimary),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    Text('${t['capacity']} t',
-                                        style: TextStyle(fontSize: 11, color: textSecondary)),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                const SizedBox(height: 16),
-
-                Text(AppStrings.get('weight_tons', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: weightCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: TextStyle(fontSize: 14, color: textPrimary),
-                  decoration: InputDecoration(hintText: '1.5', hintStyle: TextStyle(color: textSecondary), suffixText: 't'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: noteCtrl,
-                  maxLines: 1,
-                  style: TextStyle(fontSize: 13, color: textPrimary),
-                  decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
-                ),
-                if (error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
-                ],
-                const SizedBox(height: 16),
-                _GradBtn(
-                  label: AppStrings.get('place_order', locale),
-                  loading: loading,
-                  onTap: (selectedTruck == null) ? null : () async {
-                    if (weightCtrl.text.isEmpty) { setSt(() => error = AppStrings.get('enter_weight_error', locale)); return; }
-                    setSt(() { loading = true; error = null; });
-                    try {
-                      await ref.read(clientRepositoryProvider).createOrder(
-                        fromCity: _fromPlace!.name,
-                        fromAddress: _fromPlace!.address,
-                        toCity: _toPlace!.name,
-                        toAddress: _toPlace!.address,
-                        fromLatitude: _fromPlace!.lat,
-                        fromLongitude: _fromPlace!.lng,
-                        toLatitude: _toPlace!.lat,
-                        toLongitude: _toPlace!.lng,
-                        truckType: selectedTruck!,
-                        weight: double.parse(weightCtrl.text),
-                        note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
-                      );
-                      if (mounted) { Navigator.pop(ctx); _showSearching(); }
-                    } catch (e) {
-                      setSt(() { loading = false; error = AppStrings.get('generic_error', locale); });
-                    }
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showSearching() {
-    final isDark = _isDark;
-    final locale = ref.read(localeProvider).languageCode;
-    final surface = isDark ? AppTheme.darkSurface : Colors.white;
-    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+  // Haydovchi qidirilayotgan holat — endi modal emas, ClientHomeScreen
+  // ning o'zida (xarita fonida) doimiy pastki panel sifatida ko'rsatiladi,
+  // build() metodidagi "_searching && _pendingOrder != null" bo'limiga qarang.
+  void _showSearching(Map<String, dynamic> order) {
+    setState(() { _searching = true; _pendingOrder = order; });
+    _centerOnPickupForSearch();
 
     _orderTimer?.cancel();
     _orderTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
@@ -961,68 +976,85 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
           final status = latest['status'] as String;
           if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
             _orderTimer?.cancel();
-            setState(() => _activeOrder = latest);
+            setState(() { _activeOrder = latest; _searching = false; _pendingOrder = null; });
+            _syncActiveOrderProvider();
             if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
             _startTrackingLoop();
-            _showActiveOrder();
+            _openActiveOrderDetailsPage();
           } else if (status == 'CANCELLED') {
             _orderTimer?.cancel();
-            if (mounted) Navigator.pop(context);
+            setState(() { _searching = false; _pendingOrder = null; });
           }
         }
       } catch (_) {}
     });
+  }
+
+  void _cancelSearching() {
+    _orderTimer?.cancel();
+    setState(() { _searching = false; _pendingOrder = null; });
+  }
+
+  void _showSearchOrderDetails(Map<String, dynamic> order) {
+    final isDark = _isDark;
+    final locale = ref.read(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bgCard = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+
+    final truckType = order['truckType'] as String? ?? '';
+    final weight = order['weight'];
+    final price = (order['price'] as num?) ?? 0;
+    final note = order['note'] as String?;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      isDismissible: false,
       backgroundColor: surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.5,
-        padding: const EdgeInsets.all(24),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).padding.bottom + 20),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(child: Container(width: 36, height: 4,
                 decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
-            const Spacer(),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.85, end: 1.1),
-              duration: const Duration(milliseconds: 900),
-              builder: (ctx, val, child) => Transform.scale(scale: val, child: child),
-              child: Container(
-                width: 72, height: 72,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.local_shipping_outlined, color: Colors.white, size: 36),
+            const SizedBox(height: 16),
+            Text(AppStrings.get('order_details', locale),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+            const SizedBox(height: 14),
+            _DetailRow(
+              icon: Icons.local_shipping_outlined,
+              label: AppStrings.get('vehicle_type_label', locale),
+              value: truckType,
+              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+            ),
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.scale_outlined,
+              label: AppStrings.get('weight_label', locale),
+              value: weight != null ? '$weight t' : '-',
+              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+            ),
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.payments_outlined,
+              label: AppStrings.get('price_label', locale),
+              value: price > 0 ? '${(price / 1000).toStringAsFixed(0)}000 so\'m' : AppStrings.get('price_not_set', locale),
+              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+            ),
+            if (note != null && note.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _DetailRow(
+                icon: Icons.notes_outlined,
+                label: AppStrings.get('note_label', locale),
+                value: note,
+                bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(AppStrings.get('searching_driver', locale), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: textPrimary)),
-            const SizedBox(height: 6),
-            Text('${AddressHelper.shorten(_fromPlace?.name ?? '')} → ${AddressHelper.shorten(_toPlace?.name ?? '')}',
-                style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            LinearProgressIndicator(
-              backgroundColor: border,
-              valueColor: const AlwaysStoppedAnimation(AppTheme.primaryColor),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const Spacer(),
-            OutlinedButton(
-              onPressed: () { _orderTimer?.cancel(); Navigator.pop(ctx); },
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                side: BorderSide(color: border),
-                foregroundColor: textSecondary,
-              ),
-              child: Text(AppStrings.get('cancel_search', locale)),
-            ),
+            ],
           ],
         ),
       ),
@@ -1035,33 +1067,39 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     _updateDriverTracking();
   }
 
-  void _showActiveOrder() {
-    if (_activeOrder == null) return;
-    final locale = ref.read(localeProvider).languageCode;
+  // Aktiv buyurtmaning to'liq tafsilotlar sahifasi — pastdagi kichik
+  // doimiy panel bosilganda ochiladi. Sahifa true bilan yopilsa (baholab
+  // yakunlangan), tracking to'xtatilib, holat tozalanadi — xuddi avvalgi
+  // _ActiveOrderSheet dagi onComplete callback qanday ishlagan bo'lsa shunday.
+  // Home ekrandagi _activeOrder o'zgarganda, shu holatni umumiy
+  // activeOrderProvider ga ham yozib qo'yadi — Menu (toggle) bottom sheet
+  // Home ekranning private state'iga bevosita kira olmagani uchun, "Faol
+  // buyurtma" bandini shu provider orqali ko'rsatadi.
+  void _syncActiveOrderProvider() {
+    ref.read(activeOrderProvider.notifier).state = _activeOrder != null
+        ? ActiveOrderInfo(order: _activeOrder!, distKm: _driverEtaKm, timeMin: _driverEtaMin)
+        : null;
+  }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: false,
-      backgroundColor: _isDark ? AppTheme.darkSurface : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _ActiveOrderSheet(
-        order: _activeOrder!,
-        isDark: _isDark,
-        locale: locale,
-        distKm: _driverEtaKm,
-        timeMin: _driverEtaMin,
-        onComplete: () {
-          _trackingTimer?.cancel();
-          Navigator.pop(ctx);
-          setState(() {
-            _activeOrder = null; _fromPlace = null; _toPlace = null;
-            _driverEtaKm = null; _driverEtaMin = null;
-          });
-          _rebuildMapObjects();
-        },
-      ),
+  Future<void> _openActiveOrderDetailsPage() async {
+    if (_activeOrder == null) return;
+    final completed = await context.push<bool>(
+      AppRoutes.clientActiveOrderDetails,
+      extra: {
+        'order': _activeOrder,
+        'distKm': _driverEtaKm,
+        'timeMin': _driverEtaMin,
+      },
     );
+    if (completed == true && mounted) {
+      _trackingTimer?.cancel();
+      setState(() {
+        _activeOrder = null; _fromPlace = null; _toPlace = null;
+        _driverEtaKm = null; _driverEtaMin = null;
+      });
+      _syncActiveOrderProvider();
+      _rebuildMapObjects();
+    }
   }
 }
 
@@ -1124,173 +1162,68 @@ class _RouteInfoRow extends StatelessWidget {
   }
 }
 
-// ===== AKTIV BUYURTMA SHEET — endi ConsumerWidget (baholash uchun ref kerak) =====
-class _ActiveOrderSheet extends ConsumerWidget {
-  final Map<String, dynamic> order;
-  final bool isDark;
-  final String locale;
-  final double? distKm;
-  final int? timeMin;
-  final VoidCallback onComplete;
+// ===== HELPERS =====
+class _RadarPulse extends StatefulWidget {
+  const _RadarPulse();
 
-  const _ActiveOrderSheet({
-    required this.order, required this.isDark, required this.locale,
-    this.distKm, this.timeMin, required this.onComplete,
-  });
+  @override
+  State<_RadarPulse> createState() => _RadarPulseState();
+}
 
-  Future<void> _openRatingThenComplete(BuildContext context, WidgetRef ref, Map<String, dynamic>? driver, String orderId) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (ctx) => RatingDialog(
-        title: 'Haydovchini baholang',
-        subtitle: driver != null ? (driver['fullName'] as String? ?? '') : '',
-        onSubmit: (score, note) async {
-          await ref.read(ratingRepositoryProvider).rateDriver(
-            orderId: orderId,
-            score: score,
-            note: note,
-          );
-        },
-      ),
-    );
-    onComplete();
+class _RadarPulseState extends State<_RadarPulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat();
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bg = isDark ? AppTheme.darkSurface : Colors.white;
-    final textP = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textS = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-    final bgCard = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
-    final status = order['status'] as String? ?? '';
-    final driver = order['driver'] as Map<String, dynamic>?;
-    final price = (order['price'] as num?) ?? 0;
-    final fromCity = order['fromCity'] as String? ?? '';
-    final toCity = order['toCity'] as String? ?? '';
-    final orderId = order['id'] as String? ?? '';
-    final isCompleted = status == 'COMPLETED' || status == 'DELIVERED';
-
-    String statusLabel = AppStrings.get('driver_arriving', locale);
-    Color statusColor = AppTheme.primaryColor;
-    if (status == 'LOADING') { statusLabel = AppStrings.get('loading_cargo', locale); statusColor = Colors.orange; }
-    if (status == 'IN_TRANSIT') { statusLabel = AppStrings.get('in_transit', locale); statusColor = AppTheme.successColor; }
-    if (status == 'DELIVERED') { statusLabel = AppStrings.get('delivered_msg', locale); statusColor = AppTheme.successColor; }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.12), blurRadius: 24, offset: const Offset(0, -4))],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Center(child: Container(width: 36, height: 4,
-                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+  Widget _ring(double delay) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (ctx, _) {
+        final t = (_ctrl.value + delay) % 1.0;
+        return Opacity(
+          opacity: (1 - t).clamp(0.0, 1.0) * 0.55,
+          child: Transform.scale(
+            scale: 0.3 + t * 1.7,
+            child: Container(
+              width: 70, height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.primaryColor, width: 2),
+              ),
+            ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(width: 7, height: 7, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                      const SizedBox(width: 6),
-                      Text(statusLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: statusColor)),
-                    ]),
-                  ),
-                  const Spacer(),
-                  Text('${(price / 1000).toStringAsFixed(0)} 000 so\'m',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textP)),
-                ]),
-                if (distKm != null && !isCompleted) ...[
-                  const SizedBox(height: 10),
-                  _RouteInfoRow(distKm: distKm!, timeMin: timeMin, isDark: isDark, locale: locale, isEta: true),
-                ],
-                const SizedBox(height: 14),
-                if (driver != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: border, width: 0.5)),
-                    child: Row(children: [
-                      Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(child: Text((driver['fullName'] as String? ?? 'D')[0].toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(driver['fullName'] as String? ?? '', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textP)),
-                        const SizedBox(height: 2),
-                        Row(children: [
-                          const Icon(Icons.local_shipping_outlined, size: 12, color: AppTheme.primaryColor),
-                          const SizedBox(width: 4),
-                          Text('${order['truckType'] ?? ''} · ${driver['plateNumber'] ?? ''}', style: TextStyle(fontSize: 12, color: textS)),
-                        ]),
-                      ])),
-                      GestureDetector(
-                        onTap: () {
-                          context.push('/chat/$orderId', extra: driver['fullName'] as String? ?? '');
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                          child: const Icon(Icons.chat_bubble_outline, size: 18, color: AppTheme.primaryColor),
-                        ),
-                      ),
-                    ]),
-                  ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: border, width: 0.5)),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                    Column(children: [
-                      const Icon(Icons.local_shipping, size: 16, color: AppTheme.primaryColor),
-                      Container(width: 2, height: 20, color: border),
-                      const Icon(Icons.flag, size: 16, color: AppTheme.successColor),
-                    ]),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(fromCity, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
-                      const SizedBox(height: 12),
-                      Text(toCity, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
-                    ])),
-                  ]),
-                ),
-                const SizedBox(height: 14),
-                if (isCompleted)
-                  GestureDetector(
-                    onTap: () => _openRatingThenComplete(context, ref, driver, orderId),
-                    child: Container(
-                      width: double.infinity, height: 52,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFF065f46), Color(0xFF059669)], begin: Alignment.centerLeft, end: Alignment.centerRight),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4))],
-                      ),
-                      child: Center(child: Text('✅  ${AppStrings.get('complete_order', locale)}',
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))),
-                    ),
-                  ),
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 4),
-              ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 140, height: 140,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _ring(0),
+          _ring(0.33),
+          _ring(0.66),
+          Container(
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 6)],
             ),
           ),
         ],
@@ -1299,18 +1232,45 @@ class _ActiveOrderSheet extends ConsumerWidget {
   }
 }
 
-// ===== HELPERS =====
-class _GradBtn extends StatelessWidget {
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final VoidCallback? onTap;
-  final bool loading;
-  const _GradBtn({required this.label, this.onTap, this.loading = false});
+  final String value;
+  final Color bg;
+  final Color border;
+  final Color textP;
+  final Color textS;
+
+  const _DetailRow({
+    required this.icon, required this.label, required this.value,
+    required this.bg, required this.border, required this.textP, required this.textS,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null && !loading;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14), border: Border.all(color: border, width: 0.5)),
+      child: Row(children: [
+        Icon(icon, size: 18, color: AppTheme.primaryColor),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: textS))),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textP), maxLines: 1, overflow: TextOverflow.ellipsis),
+      ]),
+    );
+  }
+}
+
+class _GradBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  const _GradBtn({required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return GestureDetector(
-      onTap: loading ? null : onTap,
+      onTap: onTap,
       child: Container(
         width: double.infinity, height: 50,
         decoration: BoxDecoration(
@@ -1319,9 +1279,7 @@ class _GradBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Center(
-          child: loading
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-              : Text(label, style: TextStyle(color: enabled ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700)),
+          child: Text(label, style: TextStyle(color: enabled ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700)),
         ),
       ),
     );

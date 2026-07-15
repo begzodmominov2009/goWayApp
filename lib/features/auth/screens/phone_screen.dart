@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
@@ -283,7 +284,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                   ),
                   child: Center(
                     child: _loading
-                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        ? const AppLoadingIndicator(color: Colors.white, strokeWidth: 2)
                         : const Text('Kirish', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                   ),
                 ),

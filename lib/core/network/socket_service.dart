@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String _baseUrl = 'http://192.168.1.6:3000';
+const _baseUrl = 'http://192.168.1.6:3000';
 
 final socketServiceProvider = Provider<SocketService>((ref) {
   return SocketService();

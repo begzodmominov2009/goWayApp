@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
@@ -87,15 +88,15 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             }
           } else if (role == 'DRIVER') {
             final driver = res['data']['driver'];
-            if (driver == null) {
+            final status = driver != null ? driver['verificationStatus'] as String? : null;
+            if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
+              // Forma hali to'ldirilmagan — backend bo'sh Driver yozuvini
+              // yaratgan bo'lishi mumkin (status null emas bo'lsa ham).
               context.go(AppRoutes.driverRegister);
+            } else if (status == 'APPROVED') {
+              context.go(AppRoutes.driverHome);
             } else {
-              final status = driver['verificationStatus'];
-              if (status == 'APPROVED') {
-                context.go(AppRoutes.driverHome);
-              } else {
-                context.go(AppRoutes.pendingApproval);
-              }
+              context.go(AppRoutes.pendingApproval);
             }
           }
         }
@@ -223,7 +224,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 onPressed: _loading ? null : _verifyOtp,
                 child: _loading
                     ? const SizedBox(height: 20, width: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2))
                     : Text(AppStrings.get('verify', locale)),
               ),
               const SizedBox(height: 16),

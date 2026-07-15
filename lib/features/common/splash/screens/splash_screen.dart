@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/auth_repository.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/services/fcm_service.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 
@@ -111,7 +112,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6)),
               ),
               const SizedBox(height: 60),
-              const CircularProgressIndicator(
+              const AppLoadingIndicator(
                 color: Color(0xFF3b82f6), strokeWidth: 2,
               ),
             ],

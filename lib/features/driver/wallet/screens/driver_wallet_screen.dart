@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/router/app_router.dart';
 
@@ -105,7 +106,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLoadingIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
@@ -488,7 +489,7 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
         const SizedBox(height: 16),
 
         if (_cardLoading)
-          const Center(child: CircularProgressIndicator())
+          const Center(child: AppLoadingIndicator())
         else if (_card != null) ...[
           Text('Pul o\'tkaziladigan karta:',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
@@ -643,7 +644,7 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
               children: [
                 if (_loading)
                   const SizedBox(width: 22, height: 22,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                      child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2.5))
                 else
                   Text(
                     (_card == null) ? 'Karta yo\'q' : 'Jo\'natish',

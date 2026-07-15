@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/client_repository.dart';
 
 class ClientOrderDetailScreen extends ConsumerStatefulWidget {
@@ -91,7 +92,7 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLoadingIndicator())
           : (_error != null || _order == null)
               ? Center(
                   child: Column(

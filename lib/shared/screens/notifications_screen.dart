@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_loading_indicator.dart';
 import '../../core/network/notification_repository.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
@@ -136,7 +137,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLoadingIndicator())
           : _notifications.isEmpty
               ? Center(
                   child: Column(

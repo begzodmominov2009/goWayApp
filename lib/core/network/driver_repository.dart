@@ -196,4 +196,18 @@ class DriverRepository {
   Future<void> updateOrderStatus(String orderId, String status) async {
     await _dio.put('/orders/$orderId/status', data: {'status': status});
   }
+
+  // Driver tomonidan buyurtmani bekor qilish — faqat yuk hali olinmagan
+  // bosqichda (ACCEPTED / DRIVER_ARRIVING) ishlatiladi.
+  Future<void> cancelOrder(String orderId) async {
+    await _dio.post('/orders/$orderId/driver-cancel');
+  }
+
+  // Profil rasmini (avatar) yuklash — ixtiyoriy.
+  Future<void> uploadAvatar(Uint8List bytes, String name) async {
+    final formData = FormData.fromMap({
+      'avatar': MultipartFile.fromBytes(bytes, filename: name),
+    });
+    await _dio.post('/driver/avatar', data: formData);
+  }
 }

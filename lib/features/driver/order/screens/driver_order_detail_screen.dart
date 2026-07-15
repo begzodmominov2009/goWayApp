@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
+import '../../../../core/localization/locale_provider.dart';
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/sos_repository.dart';
 
@@ -111,6 +115,52 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
     }
   }
 
+  // Telefon raqamiga qo'ng'iroq qilishdan oldin tasdiqlash so'raladi.
+  Future<void> _confirmAndCall(String phone) async {
+    if (phone.isEmpty) return;
+    final locale = ref.read(localeProvider).languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(AppStrings.get('call_confirm_title', locale),
+            style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        content: Text('$phone\n${AppStrings.get('call_confirm_message', locale)}',
+            style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(AppStrings.get('cancel', locale),
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(AppStrings.get('call', locale),
+                style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    try {
+      final launched = await launchUrl(uri);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.get('call_failed', locale)), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.get('call_failed', locale)), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -133,7 +183,7 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLoadingIndicator())
           : (_error != null || _order == null)
               ? Center(
                   child: Column(
@@ -209,8 +259,16 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
                               children: [
                                 Text(_order?['client']?['fullName'] ?? 'Mijoz',
                                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
-                                Text(_order?['client']?['user']?['phone'] ?? '',
-                                    style: TextStyle(fontSize: 12, color: textSecondary)),
+                                if ((_order?['client']?['user']?['phone'] as String? ?? '').isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _confirmAndCall(_order!['client']['user']['phone'] as String),
+                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                      Icon(Icons.phone_outlined, size: 12, color: AppTheme.primaryColor),
+                                      const SizedBox(width: 4),
+                                      Text(_order!['client']['user']['phone'] as String,
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ),
                               ],
                             )),
                           ]),
@@ -316,7 +374,7 @@ class _StatusStep extends StatelessWidget {
               child: isDone
                   ? const Icon(Icons.check, color: Colors.white, size: 14)
                   : isActive
-                      ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 10, height: 10, child: AppLoadingIndicator(strokeWidth: 2, color: Colors.white))
                       : null,
             ),
           ),

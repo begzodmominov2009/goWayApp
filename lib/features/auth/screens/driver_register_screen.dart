@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
@@ -237,7 +238,7 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
             _Label(text: AppStrings.get('truck_type', locale), isDark: isDark),
             const SizedBox(height: 8),
             _trucksLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: AppLoadingIndicator())
                 : Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
@@ -425,7 +426,7 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
+                      child: AppLoadingIndicator(
                         color: Colors.white,
                         strokeWidth: 2,
                       ),

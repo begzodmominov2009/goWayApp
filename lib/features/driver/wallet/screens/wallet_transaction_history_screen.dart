@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/driver_repository.dart';
 
 class WalletTransactionHistoryScreen extends ConsumerStatefulWidget {
@@ -147,7 +148,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
                     ? Center(child: Text('Tranzaksiyalar topilmadi', style: TextStyle(color: textSecondary)))
                     : RefreshIndicator(

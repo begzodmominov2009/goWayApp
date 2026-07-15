@@ -12,6 +12,10 @@ import '../../features/auth/screens/client_register_screen.dart';
 import '../../features/client/home/screens/client_home_screen.dart';
 import '../../features/client/order/screens/client_orders_screen.dart';
 import '../../features/client/order/screens/order_detail_screen.dart';
+import '../../features/client/order/screens/select_address_screen.dart';
+import '../../features/client/order/screens/order_details_screen.dart';
+import '../../features/client/order/screens/active_order_details_screen.dart';
+import '../../shared/widgets/place.dart';
 import '../../features/client/profile/screens/client_profile_screen.dart';
 import '../../features/client/settings/screens/client_settings_screen.dart';
 import '../../features/driver/home/screens/driver_home_screen.dart';
@@ -44,6 +48,9 @@ class AppRoutes {
   static const clientOrderDetail = '/client/order/:id';
   static const clientProfile = '/client/profile';
   static const clientSettings = '/client/settings';
+  static const clientSelectAddress = '/client/select-address';
+  static const clientOrderDetails = '/client/order-details';
+  static const clientActiveOrderDetails = '/client/active-order-details';
 
   static const driverHome = '/driver/home';
   static const driverOrderDetail = '/driver/order/:id';
@@ -187,6 +194,47 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.clientSettings,
         pageBuilder: (context, state) => _slidePage(const ClientSettingsScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.clientSelectAddress,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _slidePage(
+            SelectAddressScreen(
+              initialFrom: extra['initialFrom'] as Place?,
+              fromLat: extra['fromLat'] as double,
+              fromLng: extra['fromLng'] as double,
+            ),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientOrderDetails,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return _slidePage(
+            OrderDetailsScreen(
+              fromPlace: extra['fromPlace'] as Place,
+              toPlace: extra['toPlace'] as Place,
+            ),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientActiveOrderDetails,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return _slidePage(
+            ActiveOrderDetailsScreen(
+              order: extra['order'] as Map<String, dynamic>,
+              distKm: extra['distKm'] as double?,
+              timeMin: extra['timeMin'] as int?,
+            ),
+            state,
+          );
+        },
       ),
 
       // Driver

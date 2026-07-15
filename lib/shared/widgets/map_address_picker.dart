@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import '../../core/theme/app_theme.dart';
+import 'app_loading_indicator.dart';
 import '../../core/network/geocode_repository.dart';
 import '../widgets/place.dart';
 
@@ -278,7 +279,7 @@ class _MapAddressPickerState extends ConsumerState<MapAddressPicker> {
               child: Container(
                 color: surface,
                 child: _searching
-                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const Center(child: AppLoadingIndicator(strokeWidth: 2))
                     : ListView.separated(
                         padding: EdgeInsets.zero,
                         itemCount: _results.length,
@@ -332,7 +333,7 @@ class _MapAddressPickerState extends ConsumerState<MapAddressPicker> {
                     _resolving
                         ? Row(children: [
                             const SizedBox(width: 14, height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2)),
+                                child: AppLoadingIndicator(strokeWidth: 2)),
                             const SizedBox(width: 8),
                             Text('Aniqlanmoqda...', style: TextStyle(fontSize: 13, color: textSecondary)),
                           ])

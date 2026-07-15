@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/rating_repository.dart';
+import '../../../../core/network/sos_repository.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
@@ -441,6 +444,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     }
   }
 
+  // Driver buyurtmani bekor qilganda (faqat yuk olinmagan bosqichda) —
+  // aktiv buyurtmani tozalab, qayta taklif kutish holatiga qaytaramiz.
+  void _clearActiveOrder() {
+    _trackingTimer?.cancel();
+    setState(() {
+      _activeOrder = null;
+      _mapObjects = [];
+      _routeDistKm = null;
+      _routeTimeMin = null;
+    });
+    _updateMyLocationPin();
+    if (_isOnline) _startOfferPolling();
+  }
+
   void _openMenu() {
     showModalBottomSheet(
       context: context,
@@ -451,6 +468,16 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   int get _zoomPercent =>
       (((_currentZoom - _kMinZoom) / (_kMaxZoom - _kMinZoom)) * 100).round().clamp(0, 100);
+
+  String _trafficLabel(String locale) {
+    if (_routeDistKm == null || _routeTimeMin == null || _routeTimeMin == 0) {
+      return AppStrings.get('traffic_light', locale);
+    }
+    final speedKmh = _routeDistKm! / (_routeTimeMin! / 60.0);
+    if (speedKmh >= 35) return AppStrings.get('traffic_light', locale);
+    if (speedKmh >= 18) return AppStrings.get('traffic_moderate', locale);
+    return AppStrings.get('traffic_heavy', locale);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -536,7 +563,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                                         gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.local_shipping, color: Colors.white, size: 13),
+                                      child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
                                     ),
                                     const SizedBox(width: 8),
                                     const Text('GoWay',
@@ -568,6 +595,18 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
               ),
             ),
           ),
+
+          if (_activeOrder != null && _routeDistKm != null)
+            Positioned(
+              left: 16, right: 16,
+              top: MediaQuery.of(context).padding.top + 74,
+              child: _LiveTrackingPanel(
+                distKm: _routeDistKm!,
+                trafficLabel: _trafficLabel(locale),
+                isDark: _isDark,
+                locale: locale,
+              ),
+            ),
 
           Positioned(
             left: 16,
@@ -645,6 +684,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                       distKm: _routeDistKm,
                       timeMin: _routeTimeMin,
                       onAdvance: _onAdvance,
+                      onCancelled: _clearActiveOrder,
                     )
                   : _hasOrder && _currentOrder != null
                   ? _OrderSheet(
@@ -687,6 +727,84 @@ class _CircleBtn extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
       ),
       child: Icon(icon, color: textColor, size: 23),
+    );
+  }
+}
+
+class _LiveTrackingPanel extends StatefulWidget {
+  final double distKm;
+  final String trafficLabel;
+  final bool isDark;
+  final String locale;
+
+  const _LiveTrackingPanel({required this.distKm, required this.trafficLabel, required this.isDark, required this.locale});
+
+  @override
+  State<_LiveTrackingPanel> createState() => _LiveTrackingPanelState();
+}
+
+class _LiveTrackingPanelState extends State<_LiveTrackingPanel> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = widget.isDark ? AppTheme.darkSurface : Colors.white;
+    final textP = widget.isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textS = widget.isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+      ),
+      child: Row(children: [
+        const Icon(Icons.local_shipping, size: 18, color: AppTheme.primaryColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${widget.distKm.toStringAsFixed(1)} km',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: textP)),
+              Text(widget.trafficLabel, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            FadeTransition(
+              opacity: _anim,
+              child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppTheme.successColor, shape: BoxShape.circle)),
+            ),
+            const SizedBox(width: 5),
+            Text(AppStrings.get('live_label', widget.locale),
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.primaryColor, letterSpacing: 0.4)),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -755,7 +873,7 @@ class _StatusBadge extends StatelessWidget {
         children: [
           if (loading)
             const SizedBox(width: 10, height: 10,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                child: AppLoadingIndicator(strokeWidth: 2, color: Colors.white))
           else
             Container(width: 8, height: 8,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
@@ -859,7 +977,7 @@ class _EmptySheet extends StatelessWidget {
                   child: Center(
                     child: onlineLoading
                         ? const SizedBox(width: 20, height: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2))
                         : Text(AppStrings.get('go_online', locale),
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
                   ),
@@ -1029,6 +1147,36 @@ class _Chip extends StatelessWidget {
   }
 }
 
+class _MiniInfoCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color bg;
+  final Color border;
+  final Color textP;
+  final Color textS;
+
+  const _MiniInfoCard({
+    required this.label, required this.value,
+    required this.bg, required this.border, required this.textP, required this.textS,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14), border: Border.all(color: border, width: 0.5)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: textS)),
+          const SizedBox(height: 3),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: textP), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+}
+
 class _PulsingDot extends StatefulWidget {
   @override
   State<_PulsingDot> createState() => _PulsingDotState();
@@ -1066,6 +1214,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
   final double? distKm;
   final int? timeMin;
   final VoidCallback onAdvance;
+  final VoidCallback onCancelled;
 
   const _ActiveOrderSheet({
     super.key,
@@ -1075,14 +1224,148 @@ class _ActiveOrderSheet extends ConsumerWidget {
     this.distKm,
     this.timeMin,
     required this.onAdvance,
+    required this.onCancelled,
   });
+
+  // Telefon raqamiga qo'ng'iroq qilishdan oldin tasdiqlash so'raladi.
+  Future<void> _confirmAndCall(BuildContext context, String phone) async {
+    if (phone.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(AppStrings.get('call_confirm_title', locale),
+            style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        content: Text('$phone\n${AppStrings.get('call_confirm_message', locale)}',
+            style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(AppStrings.get('cancel', locale),
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(AppStrings.get('call', locale),
+                style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    try {
+      final launched = await launchUrl(uri);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.get('call_failed', locale)), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.get('call_failed', locale)), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  // Buyurtmani bekor qilishdan oldin tasdiqlash so'raladi — faqat yuk hali
+  // olinmagan bosqichda (ACCEPTED / DRIVER_ARRIVING) chaqiriladi.
+  Future<void> _confirmAndCancel(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(AppStrings.get('cancel_order_title', locale),
+            style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        content: Text(AppStrings.get('cancel_order_message', locale),
+            style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(AppStrings.get('no_keep_order', locale),
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(AppStrings.get('yes_cancel_order', locale),
+                style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final orderId = order['id'] as String? ?? '';
+    try {
+      await ref.read(driverRepositoryProvider).cancelOrder(orderId);
+      onCancelled();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppStrings.get('generic_error', locale)}: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  // Favqulodda yordam (SOS) — tasdiqlash dialogi orqali, joriy
+  // joylashuv bilan birga backend'ga yuboriladi.
+  Future<void> _sendSos(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor, size: 24),
+          const SizedBox(width: 8),
+          Text(AppStrings.get('emergency_support_label', locale),
+              style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        ]),
+        content: Text(
+          'SOS signal yuborilganda, sizning joriy joylashuvingiz admin panelga darhol yuboriladi. Faqat favqulodda holatlarda ishlating.',
+          style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(AppStrings.get('cancel', locale),
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('SOS', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final position = await Geolocator.getCurrentPosition();
+      await ref.read(sosRepositoryProvider).sendSos(lat: position.latitude, lng: position.longitude);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('SOS signal yuborildi. Yordam yo\'lda.'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppStrings.get('generic_error', locale)}: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
 
   // Yetkazish yakunlanganda — avval clientni baholash so'raladi,
   // keyin buyurtma yopiladi (onAdvance chaqiriladi)
   Future<void> _openRatingThenAdvance(BuildContext context, WidgetRef ref) async {
     final client = order['client'] as Map<String, dynamic>?;
     final orderId = order['id'] as String? ?? '';
-    await showModalBottomSheet(
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -1100,7 +1383,13 @@ class _ActiveOrderSheet extends ConsumerWidget {
         },
       ),
     );
-    onAdvance();
+    if (result == true) {
+      onAdvance();
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Baholashni yuborib bo\'lmadi. Qayta urinib ko\'ring.')),
+      );
+    }
   }
 
   @override
@@ -1112,6 +1401,8 @@ class _ActiveOrderSheet extends ConsumerWidget {
     final bgCard = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
 
     final status = order['status'] as String? ?? 'ACCEPTED';
+    final client = order['client'] as Map<String, dynamic>?;
+    final clientPhone = client?['user']?['phone'] as String? ?? '';
     final price = (order['price'] as num?) ?? 0;
     final fromCity = order['fromCity'] as String? ?? '';
     final toCity = order['toCity'] as String? ?? '';
@@ -1119,8 +1410,12 @@ class _ActiveOrderSheet extends ConsumerWidget {
     final toAddress = order['toAddress'] as String? ?? '';
 
     final isPickup = status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
+    final rating = (client?['averageRating'] as num?)?.toDouble() ?? 5.0;
+    final weight = order['weight'];
+    final cargoType = (order['cargoType'] as String?) ?? (order['truckType'] as String?) ?? '-';
 
     return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.66),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1136,109 +1431,227 @@ class _ActiveOrderSheet extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isPickup
-                          ? AppTheme.primaryColor.withOpacity(0.1)
-                          : AppTheme.successColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(width: 7, height: 7,
-                        decoration: BoxDecoration(
-                          color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isPickup ? AppStrings.get('going_to_client', locale) : AppStrings.get('cargo_on_way', locale),
-                        style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700,
-                          color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
-                        ),
-                      ),
-                    ]),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () {
-                      final clientName = order['client']?['fullName'] as String? ?? '';
-                      context.push('/chat/${order['id']}', extra: clientName);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.chat_bubble_outline, size: 18, color: AppTheme.primaryColor),
-                    ),
-                  ),
-                  Text(
-                    '${(price / 1000).toStringAsFixed(0)} 000 so\'m',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textP),
-                  ),
-                ]),
-                if (distKm != null) ...[
-                  const SizedBox(height: 10),
-                  _RouteInfoRow(distKm: distKm!, timeMin: timeMin, isDark: isDark, locale: locale),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: bgCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: border, width: 0.5),
-              ),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                Column(children: [
-                  const Icon(Icons.local_shipping, size: 16, color: AppTheme.primaryColor),
-                  Container(width: 2, height: 28, color: border),
-                  const Icon(Icons.flag, size: 16, color: AppTheme.successColor),
-                ]),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(AddressHelper.shorten(fromCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
-                    if (fromAddress.isNotEmpty)
-                      Text(fromAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 16),
-                    Text(AddressHelper.shorten(toCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
-                    if (toAddress.isNotEmpty)
-                      Text(toAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ]),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isPickup
+                      ? AppTheme.primaryColor.withOpacity(0.1)
+                      : AppTheme.successColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ]),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isPickup ? AppStrings.get('going_to_client', locale) : AppStrings.get('cargo_on_way', locale),
+                    style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700,
+                      color: isPickup ? AppTheme.primaryColor : AppTheme.successColor,
+                    ),
+                  ),
+                ]),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  final clientName = order['client']?['fullName'] as String? ?? '';
+                  context.push('/chat/${order['id']}', extra: clientName);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.chat_bubble_outline, size: 18, color: AppTheme.primaryColor),
+                ),
+              ),
+              Text(
+                '${(price / 1000).toStringAsFixed(0)} 000 so\'m',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textP),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (distKm != null) _RouteInfoRow(distKm: distKm!, timeMin: timeMin, isDark: isDark, locale: locale),
+                  if (client != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: border, width: 0.5)),
+                      child: Row(children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 40, height: 40,
+                              decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.person, color: AppTheme.primaryColor, size: 20),
+                            ),
+                            Positioned(
+                              bottom: -4, left: -4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: border, width: 0.5),
+                                ),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 11),
+                                  const SizedBox(width: 2),
+                                  Text(rating.toStringAsFixed(1),
+                                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: textP)),
+                                ]),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(client['fullName'] as String? ?? '', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
+                            if (clientPhone.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              GestureDetector(
+                                onTap: () => _confirmAndCall(context, clientPhone),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.phone_outlined, size: 12, color: AppTheme.primaryColor),
+                                  const SizedBox(width: 4),
+                                  Text(clientPhone, style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+                                ]),
+                              ),
+                            ],
+                          ]),
+                        ),
+                      ]),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: bgCard,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: border, width: 0.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(AppStrings.get('route_summary_label', locale),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: textP)),
+                        const SizedBox(height: 10),
+                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Column(children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle)),
+                            Container(width: 2, height: 30, color: border),
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: border, shape: BoxShape.circle)),
+                          ]),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(AppStrings.get('pickup_label', locale),
+                                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.primaryColor, letterSpacing: 0.5)),
+                              Text(AddressHelper.shorten(fromCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
+                              if (fromAddress.isNotEmpty)
+                                Text(fromAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 14),
+                              Text(AppStrings.get('dropoff_label', locale),
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: textS, letterSpacing: 0.5)),
+                              Text(AddressHelper.shorten(toCity), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textP)),
+                              if (toAddress.isNotEmpty)
+                                Text(toAddress, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ]),
+                          ),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: _MiniInfoCard(
+                        label: AppStrings.get('load_weight_label', locale),
+                        value: weight != null ? '$weight t' : '-',
+                        bg: bgCard, border: border, textP: textP, textS: textS,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MiniInfoCard(
+                        label: AppStrings.get('cargo_type_label', locale),
+                        value: cargoType,
+                        bg: bgCard, border: border, textP: textP, textS: textS,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () => _sendSos(context, ref),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppTheme.errorColor.withOpacity(0.15) : const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.emergency_share_outlined, size: 16, color: AppTheme.errorColor),
+                        const SizedBox(width: 6),
+                        Text(AppStrings.get('emergency_support_label', locale),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.errorColor)),
+                      ]),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 14),
           Padding(
             padding: EdgeInsets.only(
-              left: 20, right: 20,
+              left: 20, right: 20, top: 12,
               bottom: MediaQuery.of(context).padding.bottom + 16,
             ),
             child: isPickup
-                ? _DriverBtn(
-                    label: AppStrings.get('picked_up_continue', locale),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1e3a8a), Color(0xFF2563eb)],
-                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                ? Row(children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _confirmAndCancel(context, ref),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppTheme.errorColor),
+                          foregroundColor: AppTheme.errorColor,
+                          minimumSize: const Size(0, 52),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: Text(AppStrings.get('cancel', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
                     ),
-                    onTap: onAdvance,
-                  )
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: _DriverBtn(
+                        label: AppStrings.get('picked_up_continue', locale),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1e3a8a), Color(0xFF2563eb)],
+                          begin: Alignment.centerLeft, end: Alignment.centerRight,
+                        ),
+                        onTap: onAdvance,
+                      ),
+                    ),
+                  ])
                 : _DriverBtn(
                     label: AppStrings.get('delivered_finish', locale),
                     gradient: const LinearGradient(
