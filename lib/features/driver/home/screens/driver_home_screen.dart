@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +23,11 @@ import '../widgets/driver_menu_sheet.dart';
 
 const double _kMinZoom = 3.0;
 const double _kMaxZoom = 20.0;
+
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -523,6 +529,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => const DriverMenuSheet(),
     );
   }
@@ -688,7 +695,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                 distKm: _routeDistKm!,
                 trafficLabel: _trafficLabel(locale),
                 isDark: _isDark,
-                locale: locale,
               ),
             ),
 
@@ -835,40 +841,18 @@ class _CircleBtn extends StatelessWidget {
   }
 }
 
-class _LiveTrackingPanel extends StatefulWidget {
+class _LiveTrackingPanel extends StatelessWidget {
   final double distKm;
   final String trafficLabel;
   final bool isDark;
-  final String locale;
 
-  const _LiveTrackingPanel({required this.distKm, required this.trafficLabel, required this.isDark, required this.locale});
-
-  @override
-  State<_LiveTrackingPanel> createState() => _LiveTrackingPanelState();
-}
-
-class _LiveTrackingPanelState extends State<_LiveTrackingPanel> with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  const _LiveTrackingPanel({required this.distKm, required this.trafficLabel, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final surface = widget.isDark ? AppTheme.darkSurface : Colors.white;
-    final textP = widget.isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textS = widget.isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textP = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textS = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -885,28 +869,11 @@ class _LiveTrackingPanelState extends State<_LiveTrackingPanel> with SingleTicke
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${widget.distKm.toStringAsFixed(1)} km',
+              Text('${distKm.toStringAsFixed(1)} km',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: textP)),
-              Text(widget.trafficLabel, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(trafficLabel, style: TextStyle(fontSize: 11, color: textS), maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            FadeTransition(
-              opacity: _anim,
-              child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppTheme.successColor, shape: BoxShape.circle)),
-            ),
-            const SizedBox(width: 5),
-            Text(AppStrings.get('live_label', widget.locale),
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.primaryColor, letterSpacing: 0.4)),
-          ]),
         ),
       ]),
     );
@@ -1576,12 +1543,19 @@ class _ActiveOrderSheet extends ConsumerWidget {
   Future<void> _openRatingThenAdvance(BuildContext context, WidgetRef ref) async {
     final client = order['client'] as Map<String, dynamic>?;
     final orderId = order['id'] as String? ?? '';
+    final navigatorContext = Navigator.of(context).context;
+
+    onCollapse();
+    await Future.delayed(const Duration(milliseconds: 380));
+    if (!navigatorContext.mounted) return;
+
     final result = await showModalBottomSheet<bool>(
-      context: context,
+      context: navigatorContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       isDismissible: false,
       enableDrag: false,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => RatingDialog(
         title: 'Mijozni baholang',
         subtitle: client != null ? (client['fullName'] as String? ?? '') : '',
@@ -1596,8 +1570,8 @@ class _ActiveOrderSheet extends ConsumerWidget {
     );
     if (result == true) {
       onAdvance();
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    } else if (navigatorContext.mounted) {
+      ScaffoldMessenger.of(navigatorContext).showSnackBar(
         const SnackBar(content: Text('Baholashni yuborib bo\'lmadi. Qayta urinib ko\'ring.')),
       );
     }
@@ -1813,7 +1787,10 @@ class _ActiveOrderSheet extends ConsumerWidget {
                                       color: AppTheme.primaryColor,
                                       border: Border.all(color: isDark ? AppTheme.darkSurface : Colors.white, width: 2),
                                     ),
-                                    child: const Icon(Icons.navigation, size: 8, color: Colors.white),
+                                    child: Transform.rotate(
+                                      angle: math.pi,
+                                      child: const Icon(Icons.navigation, size: 8, color: Colors.white),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2044,7 +2021,10 @@ class _MiniProgressTrack extends StatelessWidget {
                     color: AppTheme.primaryColor,
                     border: Border.all(color: isDark ? AppTheme.darkSurface : Colors.white, width: 2),
                   ),
-                  child: const Icon(Icons.navigation, size: 7, color: Colors.white),
+                  child: Transform.rotate(
+                    angle: math.pi,
+                    child: const Icon(Icons.navigation, size: 7, color: Colors.white),
+                  ),
                 ),
               ),
             ],
