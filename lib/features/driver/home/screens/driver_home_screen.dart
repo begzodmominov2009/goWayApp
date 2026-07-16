@@ -55,7 +55,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   Map<String, dynamic>? _activeOrder;
   double? _routeDistKm;
   int? _routeTimeMin;
+  double? _initialDistanceKm;
   List<MapObject> _mapObjects = [];
+
+  double get _routeProgress {
+    final initial = _initialDistanceKm;
+    final current = _routeDistKm;
+    if (initial == null || current == null || initial <= 0) return 0.0;
+    return (1 - (current / initial)).clamp(0.0, 1.0);
+  }
 
   @override
   void initState() {
@@ -322,6 +330,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     setState(() {
       _routeDistKm = route?.distanceKm;
       _routeTimeMin = route?.durationMin;
+      _initialDistanceKm ??= route?.distanceKm;
       _mapObjects = [
         PolylineMapObject(
           mapId: const MapObjectId('driver_route'),
@@ -386,6 +395,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _currentOrder = null;
         _currentOfferId = null;
         _activeOrder = acceptedOrder;
+        _initialDistanceKm = null;
       });
 
       await _updateTracking();
@@ -426,12 +436,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           _mapObjects = [];
           _routeDistKm = null;
           _routeTimeMin = null;
+          _initialDistanceKm = null;
         });
         _updateMyLocationPin();
         if (_isOnline) _startOfferPolling();
       } else {
         setState(() {
           _activeOrder!['status'] = nextStatus;
+          _initialDistanceKm = null;
         });
         await _updateTracking();
       }
@@ -453,6 +465,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       _mapObjects = [];
       _routeDistKm = null;
       _routeTimeMin = null;
+      _initialDistanceKm = null;
     });
     _updateMyLocationPin();
     if (_isOnline) _startOfferPolling();
@@ -683,6 +696,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                       locale: locale,
                       distKm: _routeDistKm,
                       timeMin: _routeTimeMin,
+                      routeProgress: _routeProgress,
                       onAdvance: _onAdvance,
                       onCancelled: _clearActiveOrder,
                     )
@@ -1317,6 +1331,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
   final String locale;
   final double? distKm;
   final int? timeMin;
+  final double routeProgress;
   final VoidCallback onAdvance;
   final VoidCallback onCancelled;
 
@@ -1327,6 +1342,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
     required this.locale,
     this.distKm,
     this.timeMin,
+    this.routeProgress = 0.0,
     required this.onAdvance,
     required this.onCancelled,
   });
@@ -1661,7 +1677,28 @@ class _ActiveOrderSheet extends ConsumerWidget {
                         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Column(children: [
                             Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle)),
-                            Container(width: 2, height: 30, color: border),
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(width: 2, height: 30, color: border),
+                                AnimatedPositioned(
+                                  duration: const Duration(milliseconds: 650),
+                                  curve: Curves.easeInOut,
+                                  top: routeProgress * (30 - 16),
+                                  left: (2 - 16) / 2,
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppTheme.primaryColor,
+                                      border: Border.all(color: isDark ? AppTheme.darkSurface : Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(Icons.navigation, size: 8, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
                             Container(width: 8, height: 8, decoration: BoxDecoration(color: border, shape: BoxShape.circle)),
                           ]),
                           const SizedBox(width: 12),
