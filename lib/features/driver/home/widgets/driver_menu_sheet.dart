@@ -216,8 +216,8 @@ class _MenuTile extends StatelessWidget {
     final hasBadge = badgeCount != null && badgeCount! > 0;
 
     return ListTile(
-      visualDensity: VisualDensity.standard,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       onTap: onTap,
       leading: Stack(
         clipBehavior: Clip.none,

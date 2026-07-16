@@ -29,7 +29,7 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
 }
 
-class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteAware {
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteAware, WidgetsBindingObserver {
   YandexMapController? _mapController;
   bool _isDark = false;
   bool _tiltOn = false;
@@ -68,8 +68,36 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadIcons();
     _initLocation();
+    _syncOnlineStatus();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncOnlineStatus();
+  }
+
+  // Backend'dagi haqiqiy online holatini o'qib, mahalliy _isOnline
+  // state'ini sinxronlaydi (masalan, boshqa qurilmadan yoki sessiya
+  // tugashi sabab backend offline bo'lib qolgan bo'lishi mumkin).
+  Future<void> _syncOnlineStatus() async {
+    try {
+      final profile = await ref.read(driverRepositoryProvider).getProfile();
+      final backendOnline = profile['isOnline'] == true;
+      if (!mounted || backendOnline == _isOnline) return;
+      setState(() {
+        _isOnline = backendOnline;
+        if (!_isOnline) {
+          _hasOrder = false;
+          _currentOrder = null;
+          _currentOfferId = null;
+          _offerTimer?.cancel();
+        }
+      });
+      if (_isOnline) _startOfferPolling();
+    } catch (_) {}
   }
 
   @override
@@ -85,6 +113,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
     _locationTimer?.cancel();
     _offerTimer?.cancel();
