@@ -10,6 +10,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
+import '../../../../core/network/notification_repository.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
@@ -61,12 +62,24 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   Map<String, dynamic>? _pendingOrder;
   Offset? _radarScreenPos;
 
+  int _unreadNotifCount = 0;
+  Timer? _notifCountTimer;
+
   @override
   void initState() {
     super.initState();
     _loadIcons();
     _initLocation();
     _checkActiveOrderOnStart();
+    _loadUnreadNotifCount();
+    _notifCountTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadUnreadNotifCount());
+  }
+
+  Future<void> _loadUnreadNotifCount() async {
+    try {
+      final count = await ref.read(notificationRepositoryProvider).getUnreadCount();
+      if (mounted) setState(() => _unreadNotifCount = count);
+    } catch (_) {}
   }
 
   @override
@@ -85,6 +98,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     routeObserver.unsubscribe(this);
     _orderTimer?.cancel();
     _trackingTimer?.cancel();
+    _notifCountTimer?.cancel();
     super.dispose();
   }
 
@@ -96,6 +110,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   @override
   void didPopNext() {
     if (mounted) setState(() => _showTopPanel = true);
+    _loadUnreadNotifCount();
   }
 
   Future<void> _loadIcons() async {
@@ -604,21 +619,44 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                       children: [
                         GestureDetector(
                           onTap: _openMenu,
-                          child: Container(
-                            width: 46, height: 46,
-                            decoration: BoxDecoration(
-                              color: surface,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: border, width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 4),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 46, height: 46,
+                                decoration: BoxDecoration(
+                                  color: surface,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: border, width: 1),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Icon(Icons.menu, color: textPrimary, size: 23),
+                                child: Icon(Icons.menu, color: textPrimary, size: 23),
+                              ),
+                              if (_unreadNotifCount > 0)
+                                Positioned(
+                                  right: -2, top: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.errorColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: surface, width: 1.5),
+                                    ),
+                                    child: Text(
+                                      _unreadNotifCount > 9 ? '9+' : '$_unreadNotifCount',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 12),
