@@ -223,6 +223,13 @@ class AppStrings {
       'status_delivered': 'Yetkazildi',
       'status_completed': 'Yakunlandi',
       'status_cancelled': 'Bekor qilindi',
+      // ==== Buyurtma tafsiloti (tarix, faqat o'qish) ====
+      'status_history_label': 'Status tarixi',
+      'sos_sent_label': 'SOS signal yuborilgan',
+      'additional_info_label': 'Qo\'shimcha ma\'lumot',
+      'distance_traveled_label': 'Bosib o\'tilgan masofa',
+      'completion_duration_label': 'Yakunlanish vaqti',
+      'client_rating_label': 'Mijoz bahosi',
       // ==== Buyurtmalar tarixi (qayta dizayn) ====
       'trip_label': 'Reys',
       'from_label': 'Qayerdan',
@@ -492,6 +499,13 @@ class AppStrings {
       'status_delivered': 'Доставлено',
       'status_completed': 'Завершено',
       'status_cancelled': 'Отменено',
+      // ==== Детали заказа (история, только просмотр) ====
+      'status_history_label': 'История статуса',
+      'sos_sent_label': 'Сигнал SOS отправлен',
+      'additional_info_label': 'Дополнительная информация',
+      'distance_traveled_label': 'Пройденное расстояние',
+      'completion_duration_label': 'Время выполнения',
+      'client_rating_label': 'Оценка клиента',
       // ==== История заказов (редизайн) ====
       'trip_label': 'Рейс',
       'from_label': 'Откуда',
@@ -761,6 +775,13 @@ class AppStrings {
       'status_delivered': 'Delivered',
       'status_completed': 'Completed',
       'status_cancelled': 'Cancelled',
+      // ==== Order detail (history, read-only) ====
+      'status_history_label': 'Status history',
+      'sos_sent_label': 'SOS signal sent',
+      'additional_info_label': 'Additional information',
+      'distance_traveled_label': 'Distance traveled',
+      'completion_duration_label': 'Completion time',
+      'client_rating_label': 'Client rating',
       // ==== Order history (redesign) ====
       'trip_label': 'Trip',
       'from_label': 'From',

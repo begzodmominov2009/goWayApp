@@ -1,0 +1,392 @@
+diff --git a/lib/features/driver/order/screens/driver_order_detail_screen.dart b/lib/features/driver/order/screens/driver_order_detail_screen.dart
+index 403db5d..3828d67 100644
+--- a/lib/features/driver/order/screens/driver_order_detail_screen.dart
++++ b/lib/features/driver/order/screens/driver_order_detail_screen.dart
+@@ -1,14 +1,12 @@
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:go_router/go_router.dart';
+-import 'package:geolocator/geolocator.dart';
+ import 'package:url_launcher/url_launcher.dart';
+ import '../../../../core/theme/app_theme.dart';
+ import '../../../../shared/widgets/app_loading_indicator.dart';
+ import '../../../../core/localization/locale_provider.dart';
+ import '../../../../core/localization/app_strings.dart';
+ import '../../../../core/network/driver_repository.dart';
+-import '../../../../core/network/sos_repository.dart';
+ 
+ class DriverOrderDetailScreen extends ConsumerStatefulWidget {
+   final String orderId;
+@@ -42,77 +40,58 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
+     }
+   }
+ 
++  // COMPLETED holati DELIVERED bilan bir xil bosqichda hisoblanadi;
++  // CANCELLED — _steps ro'yxatida yo'q, alohida belgi bilan ko'rsatiladi.
+   int _currentStepIndex(String status) {
++    if (status == 'COMPLETED') return _steps.length - 1;
+     final idx = _steps.indexOf(status);
+     return idx == -1 ? 0 : idx;
+   }
+ 
+-  Future<void> _advanceStatus() async {
+-    if (_order == null) return;
+-    final status = _order!['status'] as String;
+-    final idx = _currentStepIndex(status);
+-    if (idx >= _steps.length - 1) return;
+-    final nextStatus = _steps[idx + 1];
+-    try {
+-      await ref.read(driverRepositoryProvider).updateOrderStatus(widget.orderId, nextStatus);
+-      await _load();
+-    } catch (e) {
+-      if (mounted) {
+-        ScaffoldMessenger.of(context).showSnackBar(
+-          SnackBar(content: Text('Xatolik: $e'), backgroundColor: AppTheme.errorColor),
+-        );
+-      }
+-    }
++  List<Map<String, dynamic>> _sosList() {
++    final raw = _order?['sosList'];
++    if (raw is! List) return [];
++    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+   }
+ 
+-  // SOS signali — tasdiqlash dialogi orqali, joriy joylashuv bilan
+-  // birga backend'ga yuboriladi.
+-  Future<void> _sendSos() async {
+-    final confirmed = await showDialog<bool>(
+-      context: context,
+-      builder: (ctx) => AlertDialog(
+-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+-        title: const Row(children: [
+-          Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor, size: 24),
+-          SizedBox(width: 8),
+-          Text('SOS signal yuborish'),
+-        ]),
+-        content: const Text(
+-          'SOS signal yuborilganda, sizning joriy joylashuvingiz admin panelga darhol yuboriladi. Faqat favqulodda holatlarda ishlating.',
+-        ),
+-        actions: [
+-          TextButton(
+-            onPressed: () => Navigator.pop(ctx, false),
+-            child: const Text('Bekor qilish'),
+-          ),
+-          TextButton(
+-            onPressed: () => Navigator.pop(ctx, true),
+-            child: const Text('SOS yuborish', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w700)),
+-          ),
+-        ],
+-      ),
+-    );
+-
+-    if (confirmed != true) return;
++  double? _distanceTraveledKm() {
++    final raw = _order?['distance'] ?? _order?['distanceKm'];
++    if (raw is num) return raw.toDouble();
++    if (raw is String) return double.tryParse(raw);
++    return null;
++  }
+ 
+-    try {
+-      final position = await Geolocator.getCurrentPosition();
+-      await ref.read(sosRepositoryProvider).sendSos(lat: position.latitude, lng: position.longitude);
+-      if (mounted) {
+-        ScaffoldMessenger.of(context).showSnackBar(
+-          const SnackBar(
+-            content: Text('SOS signal yuborildi. Yordam yo\'lda.'),
+-            backgroundColor: AppTheme.errorColor,
+-          ),
+-        );
+-      }
+-    } catch (e) {
+-      if (mounted) {
+-        ScaffoldMessenger.of(context).showSnackBar(
+-          SnackBar(content: Text('SOS yuborishda xatolik: $e'), backgroundColor: AppTheme.errorColor),
+-        );
+-      }
++  int? _clientScore() {
++    final ratings = _order?['ratings'];
++    Map<String, dynamic>? rating;
++    if (ratings is List && ratings.isNotEmpty) {
++      rating = Map<String, dynamic>.from(ratings.first as Map);
++    } else if (ratings is Map) {
++      rating = Map<String, dynamic>.from(ratings);
+     }
++    final score = rating?['clientScore'];
++    return score is num ? score.toInt() : null;
++  }
++
++  String? _completionDuration(String locale) {
++    final created = DateTime.tryParse(_order?['createdAt'] as String? ?? '');
++    final updated = DateTime.tryParse(_order?['updatedAt'] as String? ?? '');
++    if (created == null || updated == null) return null;
++    final diff = updated.difference(created);
++    if (diff.isNegative) return null;
++    final hours = diff.inHours;
++    final minutes = diff.inMinutes.remainder(60);
++    return '$hours ${AppStrings.get('route_time_hour', locale)} $minutes ${AppStrings.get('route_time_min', locale)}';
++  }
++
++  String _formatDateTime(String? dateStr) {
++    final date = DateTime.tryParse(dateStr ?? '')?.toLocal();
++    if (date == null) return '';
++    final d = date.day.toString().padLeft(2, '0');
++    final mo = date.month.toString().padLeft(2, '0');
++    final h = date.hour.toString().padLeft(2, '0');
++    final mi = date.minute.toString().padLeft(2, '0');
++    return '$d.$mo.${date.year}, $h:$mi';
+   }
+ 
+   // Telefon raqamiga qo'ng'iroq qilishdan oldin tasdiqlash so'raladi.
+@@ -164,6 +143,7 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
+   @override
+   Widget build(BuildContext context) {
+     final isDark = Theme.of(context).brightness == Brightness.dark;
++    final locale = ref.watch(localeProvider).languageCode;
+     final surface = isDark ? AppTheme.darkSurface : Colors.white;
+     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+@@ -274,91 +254,151 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
+                           ]),
+                         ),
+                       const SizedBox(height: 12),
+-                      // Status
+-                      Container(
+-                        padding: const EdgeInsets.all(16),
+-                        decoration: BoxDecoration(
+-                          color: surface,
+-                          borderRadius: BorderRadius.circular(14),
+-                          border: Border.all(color: border),
+-                        ),
+-                        child: Column(
+-                          crossAxisAlignment: CrossAxisAlignment.start,
+-                          children: [
+-                            Text('Status', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
+-                            const SizedBox(height: 12),
+-                            _StatusStep(label: 'Qabul qilindi', isDone: _currentStepIndex(_order!['status']) >= 0, isActive: false, isDark: isDark),
+-                            _StatusStep(label: 'Mijozga bormoqda', isDone: _currentStepIndex(_order!['status']) >= 1, isActive: _order!['status'] == 'DRIVER_ARRIVING', isDark: isDark),
+-                            _StatusStep(label: 'Yuk ortilmoqda', isDone: _currentStepIndex(_order!['status']) >= 2, isActive: _order!['status'] == 'LOADING', isDark: isDark),
+-                            _StatusStep(label: 'Yo\'lda', isDone: _currentStepIndex(_order!['status']) >= 3, isActive: _order!['status'] == 'IN_TRANSIT', isDark: isDark),
+-                            _StatusStep(label: 'Yetkazildi', isDone: _currentStepIndex(_order!['status']) >= 4, isActive: false, isDark: isDark),
+-                          ],
+-                        ),
+-                      ),
+-                      const SizedBox(height: 16),
+-                      // Keyingi bosqichga o'tish tugmasi
+-                      if (_currentStepIndex(_order!['status']) < _steps.length - 1)
+-                        GestureDetector(
+-                          onTap: _advanceStatus,
+-                          child: Container(
+-                            padding: const EdgeInsets.symmetric(vertical: 14),
+-                            decoration: BoxDecoration(
+-                              gradient: const LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF2563eb)]),
+-                              borderRadius: BorderRadius.circular(14),
+-                            ),
+-                            child: Center(
+-                              child: Text(
+-                                _nextStepLabel(_order!['status']),
+-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+-                              ),
+-                            ),
++                      // Status tarixi — faqat o'qish uchun (bu sahifa buyurtmalar
++                      // tarixidan ochiladi, aktiv buyurtma paneli emas)
++                      Builder(builder: (context) {
++                        final status = _order!['status'] as String;
++                        final currentIdx = _currentStepIndex(status);
++                        final isCancelled = status == 'CANCELLED';
++                        return Container(
++                          padding: const EdgeInsets.all(16),
++                          decoration: BoxDecoration(
++                            color: surface,
++                            borderRadius: BorderRadius.circular(14),
++                            border: Border.all(color: border),
+                           ),
+-                        ),
+-                      const SizedBox(height: 12),
+-                      // SOS tugmasi — endi ishlaydi, tasdiqlash bilan
+-                      GestureDetector(
+-                        onTap: _sendSos,
+-                        child: Container(
+-                          padding: const EdgeInsets.symmetric(vertical: 14),
++                          child: Column(
++                            crossAxisAlignment: CrossAxisAlignment.start,
++                            children: [
++                              Text(AppStrings.get('status_history_label', locale),
++                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
++                              const SizedBox(height: 12),
++                              _StatusStep(label: AppStrings.get('status_accepted', locale), isDone: currentIdx >= 0, isDark: isDark),
++                              _StatusStep(label: AppStrings.get('status_driver_arriving', locale), isDone: currentIdx >= 1, isDark: isDark),
++                              _StatusStep(label: AppStrings.get('status_loading', locale), isDone: currentIdx >= 2, isDark: isDark),
++                              _StatusStep(label: AppStrings.get('status_in_transit', locale), isDone: currentIdx >= 3, isDark: isDark),
++                              _StatusStep(label: AppStrings.get('status_delivered', locale), isDone: currentIdx >= 4, isDark: isDark),
++                              if (isCancelled)
++                                _StatusStep(label: AppStrings.get('status_cancelled', locale), isDone: true, isCancelled: true, isDark: isDark),
++                            ],
++                          ),
++                        );
++                      }),
++                      // SOS ma'lumoti — faqat shu buyurtmaga oid SOS signal(lar)
++                      // yuborilgan bo'lsa ko'rsatiladi, aks holda bo'lim umuman yo'q
++                      if (_sosList().isNotEmpty) ...[
++                        const SizedBox(height: 12),
++                        Container(
++                          padding: const EdgeInsets.all(16),
+                           decoration: BoxDecoration(
+-                            border: Border.all(color: AppTheme.errorColor),
++                            color: isDark ? AppTheme.errorColor.withOpacity(0.12) : const Color(0xFFFEE2E2),
+                             borderRadius: BorderRadius.circular(14),
++                            border: Border.all(color: AppTheme.errorColor.withOpacity(0.3)),
+                           ),
+-                          child: const Row(
+-                            mainAxisAlignment: MainAxisAlignment.center,
++                          child: Column(
++                            crossAxisAlignment: CrossAxisAlignment.start,
+                             children: [
+-                              Icon(Icons.sos_outlined, color: AppTheme.errorColor, size: 20),
+-                              SizedBox(width: 8),
+-                              Text('SOS signal', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w700, fontSize: 15)),
++                              Row(children: [
++                                const Icon(Icons.emergency_share_outlined, size: 18, color: AppTheme.errorColor),
++                                const SizedBox(width: 8),
++                                Text(AppStrings.get('sos_sent_label', locale),
++                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.errorColor)),
++                              ]),
++                              const SizedBox(height: 8),
++                              for (final sos in _sosList())
++                                Padding(
++                                  padding: const EdgeInsets.only(top: 2),
++                                  child: Text(_formatDateTime(sos['createdAt'] as String?),
++                                      style: TextStyle(fontSize: 12, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
++                                ),
+                             ],
+                           ),
+                         ),
+-                      ),
++                      ],
++                      // Qo'shimcha ma'lumot — masofa/davomiylik/reyting maydonlari
++                      // backend javobida mavjud bo'lgandagina ko'rsatiladi
++                      Builder(builder: (context) {
++                        final distanceKm = _distanceTraveledKm();
++                        final duration = _completionDuration(locale);
++                        final clientScore = _clientScore();
++                        if (distanceKm == null && duration == null && clientScore == null) {
++                          return const SizedBox.shrink();
++                        }
++                        return Padding(
++                          padding: const EdgeInsets.only(top: 12),
++                          child: Container(
++                            padding: const EdgeInsets.all(16),
++                            decoration: BoxDecoration(
++                              color: surface,
++                              borderRadius: BorderRadius.circular(14),
++                              border: Border.all(color: border),
++                            ),
++                            child: Column(
++                              crossAxisAlignment: CrossAxisAlignment.start,
++                              children: [
++                                Text(AppStrings.get('additional_info_label', locale),
++                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
++                                const SizedBox(height: 10),
++                                if (distanceKm != null)
++                                  _InfoRow(
++                                    label: AppStrings.get('distance_traveled_label', locale),
++                                    value: '${distanceKm.toStringAsFixed(1)} km',
++                                    textPrimary: textPrimary, textSecondary: textSecondary,
++                                  ),
++                                if (duration != null)
++                                  _InfoRow(
++                                    label: AppStrings.get('completion_duration_label', locale),
++                                    value: duration,
++                                    textPrimary: textPrimary, textSecondary: textSecondary,
++                                  ),
++                                if (clientScore != null)
++                                  _InfoRow(
++                                    label: AppStrings.get('client_rating_label', locale),
++                                    value: '${'⭐' * clientScore}${'☆' * (5 - clientScore)} ($clientScore/5)',
++                                    textPrimary: textPrimary, textSecondary: textSecondary,
++                                  ),
++                              ],
++                            ),
++                          ),
++                        );
++                      }),
+                     ],
+                   ),
+                 ),
+     );
+   }
++}
+ 
+-  String _nextStepLabel(String currentStatus) {
+-    switch (currentStatus) {
+-      case 'ACCEPTED': return 'Mijozga yetib keldim';
+-      case 'DRIVER_ARRIVING': return 'Yuk ortildi';
+-      case 'LOADING': return 'Yo\'lga chiqdim';
+-      case 'IN_TRANSIT': return 'Yetkazib berdim';
+-      default: return 'Davom etish';
+-    }
++class _InfoRow extends StatelessWidget {
++  final String label;
++  final String value;
++  final Color textPrimary;
++  final Color textSecondary;
++  const _InfoRow({required this.label, required this.value, required this.textPrimary, required this.textSecondary});
++  @override
++  Widget build(BuildContext context) {
++    return Padding(
++      padding: const EdgeInsets.symmetric(vertical: 4),
++      child: Row(
++        mainAxisAlignment: MainAxisAlignment.spaceBetween,
++        children: [
++          Text(label, style: TextStyle(fontSize: 13, color: textSecondary)),
++          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
++        ],
++      ),
++    );
+   }
+ }
+ 
+ class _StatusStep extends StatelessWidget {
+   final String label;
+   final bool isDone;
+-  final bool isActive;
++  final bool isCancelled;
+   final bool isDark;
+-  const _StatusStep({required this.label, required this.isDone, this.isActive = false, required this.isDark});
++  const _StatusStep({required this.label, required this.isDone, this.isCancelled = false, required this.isDark});
+   @override
+   Widget build(BuildContext context) {
++    final activeColor = isCancelled ? AppTheme.errorColor : AppTheme.successColor;
+     return Padding(
+       padding: const EdgeInsets.symmetric(vertical: 6),
+       child: Row(
+@@ -366,23 +406,21 @@ class _StatusStep extends StatelessWidget {
+           Container(
+             width: 24, height: 24,
+             decoration: BoxDecoration(
+-              color: isDone ? AppTheme.successColor : isActive ? AppTheme.primaryColor : (isDark ? AppTheme.darkBackground : AppTheme.backgroundColor),
++              color: isDone ? activeColor : (isDark ? AppTheme.darkBackground : AppTheme.backgroundColor),
+               shape: BoxShape.circle,
+-              border: Border.all(color: isDone ? AppTheme.successColor : isActive ? AppTheme.primaryColor : (isDark ? AppTheme.darkBorder : AppTheme.borderColor)),
++              border: Border.all(color: isDone ? activeColor : (isDark ? AppTheme.darkBorder : AppTheme.borderColor)),
+             ),
+             child: Center(
+               child: isDone
+-                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+-                  : isActive
+-                      ? const SizedBox(width: 10, height: 10, child: AppLoadingIndicator(strokeWidth: 2, color: Colors.white))
+-                      : null,
++                  ? Icon(isCancelled ? Icons.close : Icons.check, color: Colors.white, size: 14)
++                  : null,
+             ),
+           ),
+           const SizedBox(width: 10),
+           Text(label, style: TextStyle(
+             fontSize: 13,
+-            fontWeight: isDone || isActive ? FontWeight.w600 : FontWeight.w400,
+-            color: isDone ? AppTheme.successColor : isActive ? AppTheme.primaryColor : (isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
++            fontWeight: isDone ? FontWeight.w600 : FontWeight.w400,
++            color: isDone ? activeColor : (isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+           )),
+         ],
+       ),
