@@ -29,6 +29,18 @@ final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   reverseDuration: const Duration(milliseconds: 320),
 );
 
+// Ikki koordinata orasidagi kompas yo'nalishini (0-360 gradus) hisoblaydi.
+double _calculateBearing(double lat1, double lon1, double lat2, double lon2) {
+  final dLon = (lon2 - lon1) * (math.pi / 180);
+  final lat1Rad = lat1 * (math.pi / 180);
+  final lat2Rad = lat2 * (math.pi / 180);
+  final y = math.sin(dLon) * math.cos(lat2Rad);
+  final x = math.cos(lat1Rad) * math.sin(lat2Rad) -
+      math.sin(lat1Rad) * math.cos(lat2Rad) * math.cos(dLon);
+  final bearing = math.atan2(y, x) * (180 / math.pi);
+  return (bearing + 360) % 360;
+}
+
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
 
@@ -41,6 +53,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   bool _isDark = false;
   bool _tiltOn = false;
   double _currentZoom = 14;
+  double _currentBearing = 0;
   bool _showTopPanel = true;
   String _currentAddressLabel = '';
 
@@ -228,12 +241,24 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         try {
           final pos = await Geolocator.getCurrentPosition();
           if (!mounted) return;
+          final prevPosition = _currentPosition;
+          if (prevPosition != null) {
+            final movedMeters = Geolocator.distanceBetween(
+              prevPosition.latitude, prevPosition.longitude, pos.latitude, pos.longitude,
+            );
+            if (movedMeters > 5) {
+              _currentBearing = _calculateBearing(
+                prevPosition.latitude, prevPosition.longitude, pos.latitude, pos.longitude,
+              );
+            }
+          }
           setState(() => _currentPosition = pos);
           await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
           if (_activeOrder != null) {
             _updateTracking();
           } else {
             _updateMyLocationPin();
+            _followCamera(pos.latitude, pos.longitude);
           }
         } catch (_) {}
       });
@@ -290,9 +315,26 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
           zoom: _currentZoom,
           tilt: _tiltOn ? 45 : 0,
+          azimuth: _currentBearing,
         ),
       ),
       animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.4),
+    );
+  }
+
+  // Driver harakat yo'nalishiga (bearing) qarab kamerani, joriy zoom
+  // darajasini saqlagan holda, yangi joylashuvga siljitadi (heading-up).
+  void _followCamera(double lat, double lng) {
+    _mapController?.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: Point(latitude: lat, longitude: lng),
+          zoom: _currentZoom,
+          tilt: _tiltOn ? 45 : 0,
+          azimuth: _currentBearing,
+        ),
+      ),
+      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.8),
     );
   }
 
@@ -350,7 +392,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   bool _isPickupPhase(String status) => status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
 
-  Future<void> _updateTracking() async {
+  Future<void> _updateTracking({bool fitToBounds = false}) async {
     if (_activeOrder == null || _currentPosition == null) return;
     final status = _activeOrder!['status'] as String;
     final isPickup = _isPickupPhase(status);
@@ -410,7 +452,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       ];
     });
 
-    _fitBounds(points);
+    if (fitToBounds) {
+      _fitBounds(points);
+    } else {
+      _followCamera(driverLat, driverLng);
+    }
   }
 
   void _fitBounds(List<Point> points) {
@@ -450,7 +496,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _activeSheetExpanded = false;
       });
 
-      await _updateTracking();
+      await _updateTracking(fitToBounds: true);
       _trackingTimer?.cancel();
       _trackingTimer = Timer.periodic(const Duration(seconds: 8), (_) => _updateTracking());
     } catch (e) {
@@ -498,7 +544,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           _activeOrder!['status'] = nextStatus;
           _initialDistanceKm = null;
         });
-        await _updateTracking();
+        await _updateTracking(fitToBounds: true);
       }
     } catch (e) {
       if (mounted) {
