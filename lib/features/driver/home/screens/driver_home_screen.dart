@@ -57,6 +57,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   int? _routeTimeMin;
   double? _initialDistanceKm;
   List<MapObject> _mapObjects = [];
+  bool _activeSheetExpanded = false;
 
   double get _routeProgress {
     final initial = _initialDistanceKm;
@@ -425,6 +426,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _currentOfferId = null;
         _activeOrder = acceptedOrder;
         _initialDistanceKm = null;
+        _activeSheetExpanded = false;
       });
 
       await _updateTracking();
@@ -466,6 +468,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           _routeDistKm = null;
           _routeTimeMin = null;
           _initialDistanceKm = null;
+          _activeSheetExpanded = false;
         });
         _updateMyLocationPin();
         if (_isOnline) _startOfferPolling();
@@ -495,6 +498,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       _routeDistKm = null;
       _routeTimeMin = null;
       _initialDistanceKm = null;
+      _activeSheetExpanded = false;
     });
     _updateMyLocationPin();
     if (_isOnline) _startOfferPolling();
@@ -708,6 +712,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
             ),
           ),
 
+          if (_activeOrder != null && _activeSheetExpanded)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _activeSheetExpanded = false),
+                child: Container(color: Colors.black.withOpacity(0.35)),
+              ),
+            ),
+
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: AnimatedSwitcher(
@@ -718,17 +730,28 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                 child: FadeTransition(opacity: animation, child: child),
               ),
               child: _activeOrder != null
-                  ? _ActiveOrderSheet(
-                      key: ValueKey('active_${_activeOrder!['status']}'),
-                      order: _activeOrder!,
-                      isDark: _isDark,
-                      locale: locale,
-                      distKm: _routeDistKm,
-                      timeMin: _routeTimeMin,
-                      routeProgress: _routeProgress,
-                      onAdvance: _onAdvance,
-                      onCancelled: _clearActiveOrder,
-                    )
+                  ? (_activeSheetExpanded
+                      ? _ActiveOrderSheet(
+                          key: ValueKey('active_full_${_activeOrder!['status']}'),
+                          order: _activeOrder!,
+                          isDark: _isDark,
+                          locale: locale,
+                          distKm: _routeDistKm,
+                          timeMin: _routeTimeMin,
+                          routeProgress: _routeProgress,
+                          onAdvance: _onAdvance,
+                          onCancelled: _clearActiveOrder,
+                          onCollapse: () => setState(() => _activeSheetExpanded = false),
+                        )
+                      : _ActiveOrderMiniPanel(
+                          key: ValueKey('active_mini_${_activeOrder!['status']}'),
+                          distKm: _routeDistKm,
+                          timeMin: _routeTimeMin,
+                          routeProgress: _routeProgress,
+                          isDark: _isDark,
+                          locale: locale,
+                          onDetail: () => setState(() => _activeSheetExpanded = true),
+                        ))
                   : _hasOrder && _currentOrder != null
                   ? _OrderSheet(
                       key: const ValueKey('order'),
@@ -1066,7 +1089,7 @@ class _OrderSheet extends StatelessWidget {
       ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 12,
+        bottom: MediaQuery.of(context).padding.bottom + 6,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1123,11 +1146,11 @@ class _OrderSheet extends StatelessWidget {
               _Chip(label: '${order['weight']} t', icon: Icons.scale_outlined, isDark: isDark),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           _SlideToAcceptButton(
-            onAccept: onAccept,
+            label: AppStrings.get('slide_to_accept', locale),
+            onComplete: onAccept,
             isDark: isDark,
-            locale: locale,
           ),
         ],
       ),
@@ -1136,14 +1159,14 @@ class _OrderSheet extends StatelessWidget {
 }
 
 class _SlideToAcceptButton extends StatefulWidget {
-  final VoidCallback onAccept;
+  final String label;
+  final VoidCallback onComplete;
   final bool isDark;
-  final String locale;
 
   const _SlideToAcceptButton({
-    required this.onAccept,
+    required this.label,
+    required this.onComplete,
     required this.isDark,
-    required this.locale,
   });
 
   @override
@@ -1186,7 +1209,7 @@ class _SlideToAcceptButtonState extends State<_SlideToAcceptButton> with SingleT
         _completed = true;
         _dragX = _maxDrag;
       });
-      widget.onAccept();
+      widget.onComplete();
     } else {
       _resetController.value = progress;
       _resetController.animateTo(0, curve: Curves.easeOut);
@@ -1228,12 +1251,11 @@ class _SlideToAcceptButtonState extends State<_SlideToAcceptButton> with SingleT
               ),
               Align(
                 alignment: Alignment.center,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 100),
-                  opacity: 1 - progress * 0.7,
-                  child: Text(
-                    AppStrings.get('slide_to_accept', widget.locale),
-                    style: TextStyle(fontWeight: FontWeight.w700, color: textColor),
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color.lerp(textColor, Colors.white, progress),
                   ),
                 ),
               ),
@@ -1363,6 +1385,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
   final double routeProgress;
   final VoidCallback onAdvance;
   final VoidCallback onCancelled;
+  final VoidCallback onCollapse;
 
   const _ActiveOrderSheet({
     super.key,
@@ -1374,6 +1397,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
     this.routeProgress = 0.0,
     required this.onAdvance,
     required this.onCancelled,
+    required this.onCollapse,
   });
 
   // Telefon raqamiga qo'ng'iroq qilishdan oldin tasdiqlash so'raladi.
@@ -1563,6 +1587,9 @@ class _ActiveOrderSheet extends ConsumerWidget {
     final weight = order['weight'];
     final cargoType = (order['cargoType'] as String?) ?? (order['truckType'] as String?) ?? '-';
 
+    double dragDownAccum = 0;
+    bool dragCollapsed = false;
+
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.66),
       decoration: BoxDecoration(
@@ -1573,10 +1600,22 @@ class _ActiveOrderSheet extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Center(child: Container(width: 36, height: 4,
-                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+          GestureDetector(
+            onTap: onCollapse,
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragUpdate: (details) {
+              if (dragCollapsed) return;
+              dragDownAccum = (dragDownAccum + details.delta.dy).clamp(0, double.infinity);
+              if (dragDownAccum > 40) {
+                dragCollapsed = true;
+                onCollapse();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Center(child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -1607,6 +1646,19 @@ class _ActiveOrderSheet extends ConsumerWidget {
                 ]),
               ),
               const Spacer(),
+              if (clientPhone.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _confirmAndCall(context, clientPhone),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.call_outlined, size: 18, color: AppTheme.primaryColor),
+                  ),
+                ),
               GestureDetector(
                 onTap: () {
                   final clientName = order['client']?['fullName'] as String? ?? '';
@@ -1804,9 +1856,14 @@ class _ActiveOrderSheet extends ConsumerWidget {
                           side: const BorderSide(color: AppTheme.errorColor),
                           foregroundColor: AppTheme.errorColor,
                           minimumSize: const Size(0, 52),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: Text(AppStrings.get('cancel', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(AppStrings.get('cancel', locale),
+                              maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1822,17 +1879,140 @@ class _ActiveOrderSheet extends ConsumerWidget {
                       ),
                     ),
                   ])
-                : _DriverBtn(
+                : _SlideToAcceptButton(
                     label: AppStrings.get('delivered_finish', locale),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF065f46), Color(0xFF059669)],
-                      begin: Alignment.centerLeft, end: Alignment.centerRight,
-                    ),
-                    onTap: () => _openRatingThenAdvance(context, ref),
+                    onComplete: () => _openRatingThenAdvance(context, ref),
+                    isDark: isDark,
                   ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ===== KICHIK, DOIMIY AKTIV BUYURTMA PANELI (Driver) =====
+class _ActiveOrderMiniPanel extends StatelessWidget {
+  final double? distKm;
+  final int? timeMin;
+  final double routeProgress;
+  final bool isDark;
+  final String locale;
+  final VoidCallback onDetail;
+
+  const _ActiveOrderMiniPanel({
+    super.key,
+    this.distKm,
+    this.timeMin,
+    required this.routeProgress,
+    required this.isDark,
+    required this.locale,
+    required this.onDetail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textP = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    final distLabel = distKm != null ? distKm!.toStringAsFixed(1) : '--';
+    final timeLabel = timeMin != null ? '$timeMin' : '--';
+
+    return GestureDetector(
+      onTap: onDetail,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.35 : 0.1), blurRadius: 20)],
+        ),
+        padding: EdgeInsets.only(
+          left: 18, right: 12, top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$distLabel km · $timeLabel ${AppStrings.get('route_time_min', locale)}',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textP),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  _MiniProgressTrack(progress: routeProgress, isDark: isDark, border: border),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                AppStrings.get('order_details', locale),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniProgressTrack extends StatelessWidget {
+  final double progress;
+  final bool isDark;
+  final Color border;
+
+  const _MiniProgressTrack({required this.progress, required this.isDark, required this.border});
+
+  @override
+  Widget build(BuildContext context) {
+    const dot = 14.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final travel = (constraints.maxWidth - dot).clamp(0.0, double.infinity);
+        return SizedBox(
+          height: dot,
+          width: double.infinity,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.centerLeft,
+            children: [
+              Container(
+                height: 3,
+                width: double.infinity,
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.easeInOut,
+                left: progress * travel,
+                child: Container(
+                  width: dot,
+                  height: dot,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.primaryColor,
+                    border: Border.all(color: isDark ? AppTheme.darkSurface : Colors.white, width: 2),
+                  ),
+                  child: const Icon(Icons.navigation, size: 7, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1849,13 +2029,20 @@ class _DriverBtn extends StatelessWidget {
     onTap: onTap,
     child: Container(
       width: double.infinity, height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4))],
       ),
-      child: Center(child: Text(label,
-          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label,
+              maxLines: 1,
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+        ),
+      ),
     ),
   );
 }

@@ -201,8 +201,8 @@ class AppStrings {
       'slide_to_accept': 'Qabul qilish uchun suring',
       'going_to_client': 'Mijozga bormoqda',
       'cargo_on_way': 'Yuk yo\'lda',
-      'picked_up_continue': '📦  Yuk olindi — yo\'lga chiqish',
-      'delivered_finish': '✅  Yetkazildi — yakunlash',
+      'picked_up_continue': 'Yuk olindi — yo\'lga chiqish',
+      'delivered_finish': 'Yetkazildi — yakunlash',
       // ==== Driver History ====
       'view_all_history': 'Barchasini ko\'rish',
       'order_history_title': 'Buyurtmalar tarixi',
@@ -477,8 +477,8 @@ class AppStrings {
       'slide_to_accept': 'Проведите, чтобы принять',
       'going_to_client': 'Едет к клиенту',
       'cargo_on_way': 'Груз в пути',
-      'picked_up_continue': '📦  Груз забран — в путь',
-      'delivered_finish': '✅  Доставлено — завершить',
+      'picked_up_continue': 'Груз забран — в путь',
+      'delivered_finish': 'Доставлено — завершить',
       // ==== Driver History ====
       'view_all_history': 'Смотреть все',
       'order_history_title': 'История заказов',
@@ -753,8 +753,8 @@ class AppStrings {
       'slide_to_accept': 'Slide to accept',
       'going_to_client': 'Going to client',
       'cargo_on_way': 'Cargo on the way',
-      'picked_up_continue': '📦  Picked up — go',
-      'delivered_finish': '✅  Delivered — finish',
+      'picked_up_continue': 'Picked up — go',
+      'delivered_finish': 'Delivered — finish',
       // ==== Driver History ====
       'view_all_history': 'View all',
       'order_history_title': 'Order history',
