@@ -263,7 +263,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.clientOrders),
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.notifications_outlined,
                       iconColor: AppTheme.successColor,
@@ -271,7 +271,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.notifications),
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.bookmark_border,
                       iconColor: AppTheme.primaryColor,
@@ -312,7 +312,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: _showLanguageSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: isDark
                           ? Icons.dark_mode_outlined
@@ -327,7 +327,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: _showThemeSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.lock_outline,
                       iconColor: textSecondary,
@@ -335,7 +335,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       isDark: isDark,
                       onTap: _showChangePasswordSheet,
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.description_outlined,
                       iconColor: textSecondary,
@@ -793,10 +793,9 @@ class _MenuItem extends StatelessWidget {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
+      visualDensity: VisualDensity.standard,
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Container(
         width: 40,
         height: 40,

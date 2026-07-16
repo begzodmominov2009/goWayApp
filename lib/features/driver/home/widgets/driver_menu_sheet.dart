@@ -90,7 +90,7 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
               context.push(AppRoutes.driverProfile);
             },
           ),
-          Divider(height: 1, color: border, indent: 20, endIndent: 20),
+          Divider(height: 8, color: border, indent: 20, endIndent: 20),
           _MenuTile(
             icon: Icons.language_outlined,
             label: AppStrings.get('language', locale),
@@ -216,8 +216,8 @@ class _MenuTile extends StatelessWidget {
     final hasBadge = badgeCount != null && badgeCount! > 0;
 
     return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
+      visualDensity: VisualDensity.standard,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       onTap: onTap,
       leading: Stack(
         clipBehavior: Clip.none,

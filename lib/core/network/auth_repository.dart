@@ -34,6 +34,28 @@ class AuthRepository {
     }
   }
 
+  // Refresh token — accessToken muddati tugaganda, foydalanuvchini
+  // qayta login qildirmasdan yangi accessToken olish uchun ishlatiladi.
+  // Backend /auth/verify-otp va /auth/login javobida "refreshToken"
+  // maydonini qaytaradi (JWT_REFRESH_EXPIRES_IN="30d").
+  Future<void> saveRefreshToken(String refreshToken) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('refresh_token', refreshToken);
+    } else {
+      await _storage.write(key: 'refresh_token', value: refreshToken);
+    }
+  }
+
+  Future<String?> getRefreshToken() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('refresh_token');
+    } else {
+      return await _storage.read(key: 'refresh_token');
+    }
+  }
+
   Future<void> saveRole(String role) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -64,6 +86,7 @@ class AuthRepository {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
+      await prefs.remove('refresh_token');
       await prefs.remove('role');
     } else {
       await _storage.deleteAll();
@@ -117,5 +140,29 @@ class AuthRepository {
       'code': code,
       'newPassword': newPassword,
     });
+  }
+
+  // Refresh token orqali yangi accessToken olish. Bu — asosiy Dio
+  // instansiyasidan FOYDALANMAYDI (chunki u interceptor orqali eski
+  // token bilan ishlaydi va cheksiz tsiklga tushishi mumkin) — o'z
+  // Dio nusxasi bilan, to'g'ridan-to'g'ri so'rov yuboradi.
+  Future<String?> refreshAccessToken() async {
+    final refreshToken = await getRefreshToken();
+    if (refreshToken == null) return null;
+
+    try {
+      final plainDio = Dio(BaseOptions(baseUrl: baseUrl));
+      final res = await plainDio.post('/auth/refresh', data: {
+        'refreshToken': refreshToken,
+      });
+      if (res.data['success'] == true) {
+        final newAccessToken = res.data['data']['accessToken'] as String;
+        await saveToken(newAccessToken);
+        return newAccessToken;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

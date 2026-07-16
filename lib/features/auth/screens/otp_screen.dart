@@ -68,10 +68,16 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
       if (res['success'] == true) {
         final token = res['data']['accessToken'] ?? res['data']['token'];
+        final refreshToken = res['data']['refreshToken'] as String?;
         final user = res['data']['user'];
         final role = user['role'] as String;
 
         await authRepo.saveToken(token);
+        // Refresh token — accessToken (15 daqiqa) eskirganda, foyda-
+        // lanuvchini qayta login qildirmasdan yangi token olish uchun.
+        if (refreshToken != null) {
+          await authRepo.saveRefreshToken(refreshToken);
+        }
         await authRepo.saveRole(role);
 
         // Tizimga kirish muvaffaqiyatli bo'lgach — FCM tokenni sozlaymiz

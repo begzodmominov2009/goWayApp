@@ -254,7 +254,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.driverWallet),
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.receipt_long_outlined,
                       iconColor: AppTheme.primaryColor,
@@ -262,7 +262,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.driverHistory),
                     ),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                       icon: Icons.notifications_outlined,
                       iconColor: AppTheme.successColor,
@@ -310,12 +310,12 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                         iconColor: textSecondary,
                         label: AppStrings.get('truck_type', locale),
                         value: _profile?['truckType'] ?? '—', isDark: isDark),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.pin_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('plate_number', locale),
                         value: _profile?['plateNumber'] ?? '—', isDark: isDark),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.scale_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('capacity', locale),
@@ -343,7 +343,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                         label: AppStrings.get('language', locale),
                         value: locale == 'uz' ? 'O\'zbek' : locale == 'ru' ? 'Русский' : 'English',
                         isDark: isDark, onTap: _showLanguageSheet),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(
                         icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
                         iconColor: textSecondary,
@@ -354,12 +354,12 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                                 ? AppStrings.get('theme_light', locale)
                                 : AppStrings.get('theme_auto', locale),
                         isDark: isDark, onTap: _showThemeSheet),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.lock_outline,
                         iconColor: textSecondary,
                         label: AppStrings.get('change_password', locale),
                         isDark: isDark, onTap: _showChangePasswordSheet),
-                    Divider(height: 1, color: border, indent: 68),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.description_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('terms', locale),
@@ -1490,10 +1490,9 @@ class _MenuItem extends StatelessWidget {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
+      visualDensity: VisualDensity.standard,
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Container(
         width: 40, height: 40,
         decoration: BoxDecoration(
