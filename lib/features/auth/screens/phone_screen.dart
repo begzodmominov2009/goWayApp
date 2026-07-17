@@ -23,7 +23,6 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
   bool _obscurePassword = true;
   bool _loading = false;
   String? _error;
-  bool _useOtpFlow = false;
 
   @override
   void dispose() {
@@ -44,19 +43,14 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     });
 
     final authRepo = ref.read(authRepositoryProvider);
+    final locale = ref.read(localeProvider).languageCode;
 
     try {
-      if (_useOtpFlow) {
-        await authRepo.sendOtp(_fullPhone, widget.role);
-        if (mounted) {
-          context.push(AppRoutes.otp, extra: {'phone': _fullPhone, 'role': widget.role});
-        }
-        return;
-      }
-
-      // Parol bilan kirish
       if (_passwordController.text.isEmpty) {
-        setState(() { _loading = false; _error = 'Parolni kiriting'; });
+        setState(() {
+          _loading = false;
+          _error = AppStrings.get('enter_password_error', locale);
+        });
         return;
       }
 
@@ -103,20 +97,27 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
         }
       }
     } catch (e) {
-      final message = e.toString().toLowerCase();
-      if (message.contains('o\'rnatilmagan') ||
-          message.contains('password') ||
-          message.contains('404') ||
-          message.contains('topilmadi')) {
-        // Parol hali o'rnatilmagan — OTP orqali kirish oqimiga o'tamiz
-        setState(() {
-          _useOtpFlow = true;
-          _loading = false;
-        });
-        await _submit();
-        return;
+      setState(() => _error = AppStrings.get('invalid_credentials', locale));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _createNewAccount() async {
+    if (!_isPhoneValid) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final authRepo = ref.read(authRepositoryProvider);
+      await authRepo.sendOtp(_fullPhone, widget.role);
+      if (mounted) {
+        context.push(AppRoutes.otp, extra: {'phone': _fullPhone, 'role': widget.role});
       }
-      setState(() => _error = 'Telefon raqam yoki parol noto\'g\'ri');
+    } catch (e) {
+      final locale = ref.read(localeProvider).languageCode;
+      setState(() => _error = AppStrings.get('generic_error', locale));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -170,6 +171,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                         keyboardType: TextInputType.phone,
                         style: TextStyle(fontSize: 16, color: textPrimary),
                         decoration: InputDecoration(
+                          filled: false,
                           hintText: '90 123 45 67',
                           hintStyle: TextStyle(color: textSecondary),
                           border: InputBorder.none,
@@ -180,63 +182,67 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                   ],
                 ),
               ),
-              if (!_useOtpFlow) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: border),
-                  ),
-                  child: TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    style: TextStyle(fontSize: 16, color: textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Parol',
-                      hintStyle: TextStyle(color: textSecondary),
-                      border: InputBorder.none,
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility,
-                            color: textSecondary, size: 20),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: border),
+                ),
+                child: TextField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  style: TextStyle(fontSize: 16, color: textPrimary),
+                  decoration: InputDecoration(
+                    filled: false,
+                    hintText: AppStrings.get('password_field_hint', locale),
+                    hintStyle: TextStyle(color: textSecondary),
+                    border: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: textSecondary, size: 20),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                 ),
-              ],
+              ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
               ],
               const SizedBox(height: 16),
-              if (!_useOtpFlow)
-                TextButton(
-                  onPressed: () {
-                    context.push('/forgot-password', extra: {'phone': _fullPhone, 'role': widget.role});
-                  },
-                  child: Text(AppStrings.get('forgot_password', locale),
-                      style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
-                ),
+              TextButton(
+                onPressed: () {
+                  context.push(AppRoutes.forgotPassword, extra: {'phone': _fullPhone, 'role': widget.role});
+                },
+                child: Text(AppStrings.get('forgot_password', locale),
+                    style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+              ),
               const Spacer(),
               ElevatedButton(
                 onPressed: (_isPhoneValid && !_loading) ? _submit : null,
                 child: _loading
                     ? const SizedBox(height: 20, width: 20,
                         child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(_useOtpFlow
-                        ? AppStrings.get('send_code', locale)
-                        : AppStrings.get('verify', locale)),
+                    : Text(AppStrings.get('verify', locale)),
               ),
               const SizedBox(height: 16),
               Center(
-                child: TextButton(
-                  onPressed: () => setState(() => _useOtpFlow = !_useOtpFlow),
-                  child: Text(
-                    _useOtpFlow ? 'Parol bilan kirish' : 'SMS kod bilan kirish',
-                    style: const TextStyle(color: AppTheme.primaryColor),
-                  ),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(AppStrings.get('no_account_question', locale),
+                        style: TextStyle(color: textSecondary)),
+                    TextButton(
+                      onPressed: (_isPhoneValid && !_loading) ? _createNewAccount : null,
+                      child: Text(
+                        AppStrings.get('create_new_account', locale),
+                        style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

@@ -5,6 +5,7 @@ import '../../features/common/splash/screens/splash_screen.dart';
 import '../../features/common/onboarding/screens/onboarding_screen.dart';
 import '../../features/auth/screens/phone_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/role_select_screen.dart';
 import '../../features/auth/screens/driver_register_screen.dart';
 import '../../features/auth/screens/pending_approval_screen.dart';
@@ -38,6 +39,7 @@ class AppRoutes {
   static const roleSelect = '/role-select';
   static const phone = '/phone';
   static const otp = '/otp';
+  static const forgotPassword = '/forgot-password';
   static const driverRegister = '/driver-register';
   static const driverHistory = '/driver/history';
   static const driverOrderHistoryFull = '/driver/history/all';
@@ -150,6 +152,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           state,
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _slidePage(
+            ForgotPasswordScreen(
+              initialPhone: extra['phone'] as String?,
+              role: extra['role'] as String? ?? 'CLIENT',
+            ),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.driverRegister,
