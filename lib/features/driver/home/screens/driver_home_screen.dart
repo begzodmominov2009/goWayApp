@@ -24,6 +24,38 @@ import '../widgets/driver_menu_sheet.dart';
 const double _kMinZoom = 3.0;
 const double _kMaxZoom = 20.0;
 
+// Heading-up navigatsiyada, kamera markazini driver joylashuvidan biroz
+// oldinga (yo'l yo'nalishi bo'yicha) siljitish uchun — natijada driver
+// ekran markazidan pastroqda, yo'lning oldingi qismi esa tepada ko'proq
+// ko'rinadi (Yandex/Google Maps navigatsiyasidagi standart uslub).
+// CameraPosition (newCameraPosition) uchun focusRect parametri
+// YandexMapKit'da mavjud emas (faqat newGeometry/newBounds kabi "bounds"
+// operatsiyalarida bor), shuning uchun kamera nishonini shu masofaga
+// siljitib hisoblaymiz.
+const double _kNavForwardOffsetMeters = 70.0;
+
+// Berilgan nuqtadan bearing yo'nalishi bo'yicha distanceMeters masofaga
+// siljigan yangi geografik nuqtani hisoblaydi (destination point formula).
+Point _offsetPoint(double lat, double lng, double bearingDeg, double distanceMeters) {
+  const earthRadius = 6371000.0;
+  final bearingRad = bearingDeg * (math.pi / 180);
+  final latRad = lat * (math.pi / 180);
+  final lngRad = lng * (math.pi / 180);
+  final angularDistance = distanceMeters / earthRadius;
+
+  final newLatRad = math.asin(
+    math.sin(latRad) * math.cos(angularDistance) +
+        math.cos(latRad) * math.sin(angularDistance) * math.cos(bearingRad),
+  );
+  final newLngRad = lngRad +
+      math.atan2(
+        math.sin(bearingRad) * math.sin(angularDistance) * math.cos(latRad),
+        math.cos(angularDistance) - math.sin(latRad) * math.sin(newLatRad),
+      );
+
+  return Point(latitude: newLatRad * (180 / math.pi), longitude: newLngRad * (180 / math.pi));
+}
+
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
   reverseDuration: const Duration(milliseconds: 320),
@@ -309,10 +341,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   void _toggleTilt() {
     if (_currentPosition == null) return;
     setState(() => _tiltOn = !_tiltOn);
+    final target = _offsetPoint(
+      _currentPosition!.latitude, _currentPosition!.longitude, _currentBearing, _kNavForwardOffsetMeters,
+    );
     _mapController?.moveCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+          target: target,
           zoom: _currentZoom,
           tilt: _tiltOn ? 45 : 0,
           azimuth: _currentBearing,
@@ -324,11 +359,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   // Driver harakat yo'nalishiga (bearing) qarab kamerani, joriy zoom
   // darajasini saqlagan holda, yangi joylashuvga siljitadi (heading-up).
+  // Kamera nishoni driver joylashuvidan bearing bo'yicha biroz oldinga
+  // siljitiladi — natijada driver ekran markazidan pastroqda ko'rinadi.
   void _followCamera(double lat, double lng) {
+    final target = _offsetPoint(lat, lng, _currentBearing, _kNavForwardOffsetMeters);
     _mapController?.moveCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: Point(latitude: lat, longitude: lng),
+          target: target,
           zoom: _currentZoom,
           tilt: _tiltOn ? 45 : 0,
           azimuth: _currentBearing,
@@ -437,8 +475,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           PlacemarkMapObject(
             mapId: const MapObjectId('driver_pos'),
             point: Point(latitude: driverLat, longitude: driverLng),
+            // rotationType.noRotation — truck belgisi kamera (xarita) bilan
+            // birga AYLANMAYDI, ekranga nisbatan doim tepaga qarab turadi
+            // (heading-up navigatsiya uslubi, YandexMapKit standart qiymati
+            // ham shu, lekin bu yerda niyatni aniq ko'rsatish uchun yozilgan).
             icon: PlacemarkIcon.single(PlacemarkIconStyle(
               image: _truckIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
+              rotationType: RotationType.noRotation,
             )),
           ),
         if (_finishIcon != null)
@@ -1623,6 +1666,19 @@ class _ActiveOrderSheet extends ConsumerWidget {
     }
   }
 
+  // Yuk olinganda (ACCEPTED/DRIVER_ARRIVING -> IN_TRANSIT) — avval sheet'ni
+  // "collapse" qilib (mini panelga yig'ib) uning animatsiyasi tugashini
+  // kutamiz, KEYIN statusni yangilaymiz. Aks holda, sheet ochiq turgan
+  // holatda bir vaqtning o'zida ham _activeSheetExpanded, ham order status
+  // (demak AnimatedSwitcher key'i) o'zgarib, ikkala o'zgarish bitta
+  // freym ichida chalkashib, animatsiya ko'rinmay qolar edi (xuddi
+  // _openRatingThenAdvance dagi onCollapse() + kutish naqshiga o'xshab).
+  Future<void> _collapseThenAdvance() async {
+    onCollapse();
+    await Future.delayed(const Duration(milliseconds: 380));
+    onAdvance();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bg = isDark ? AppTheme.darkSurface : Colors.white;
@@ -1936,7 +1992,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
                           colors: [Color(0xFF1e3a8a), Color(0xFF2563eb)],
                           begin: Alignment.centerLeft, end: Alignment.centerRight,
                         ),
-                        onTap: onAdvance,
+                        onTap: _collapseThenAdvance,
                       ),
                     ),
                   ])
