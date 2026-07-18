@@ -109,6 +109,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   double? _routeDistKm;
   int? _routeTimeMin;
   double? _initialDistanceKm;
+  List<Point>? _savedRoutePoints;
   List<MapObject> _mapObjects = [];
   bool _activeSheetExpanded = false;
 
@@ -463,6 +464,68 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   bool _isPickupPhase(String status) => status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
 
+  // Nuqta va segment (a-b oralig'i) orasidagi taxminiy masofa — segment
+  // boshi/oxiriga bo'lgan eng yaqin masofani oladi (aniq perpendikulyar
+  // masofa emas, lekin amaliy jihatdan yetarli aniqlikda ishlaydi).
+  double _distanceToSegment(Point p, Point a, Point b) {
+    final d1 = Geolocator.distanceBetween(p.latitude, p.longitude, a.latitude, a.longitude);
+    final d2 = Geolocator.distanceBetween(p.latitude, p.longitude, b.latitude, b.longitude);
+    return d1 < d2 ? d1 : d2;
+  }
+
+  double _distanceToPolyline(Point point, List<Point> polyline) {
+    if (polyline.isEmpty) return double.infinity;
+    double minDistance = double.infinity;
+    for (int i = 0; i < polyline.length - 1; i++) {
+      final segStart = polyline[i];
+      final segEnd = polyline[i + 1];
+      final dist = _distanceToSegment(point, segStart, segEnd);
+      if (dist < minDistance) minDistance = dist;
+    }
+    return minDistance;
+  }
+
+  List<MapObject> _buildTrackingMapObjects({
+    required List<Point> points,
+    required double driverLat,
+    required double driverLng,
+    required double targetLat,
+    required double targetLng,
+    required bool isPickup,
+  }) {
+    return [
+      PolylineMapObject(
+        mapId: const MapObjectId('driver_route'),
+        polyline: Polyline(points: points),
+        strokeColor: isPickup
+            ? (_isDark ? const Color(0xFF60A5FA) : const Color(0xFF1e3a8a))
+            : (_isDark ? const Color(0xFF34D399) : const Color(0xFF059669)),
+        strokeWidth: 5,
+      ),
+      if (_truckIcon != null)
+        PlacemarkMapObject(
+          mapId: const MapObjectId('driver_pos'),
+          point: Point(latitude: driverLat, longitude: driverLng),
+          // rotationType.noRotation — truck belgisi kamera (xarita) bilan
+          // birga AYLANMAYDI, ekranga nisbatan doim tepaga qarab turadi
+          // (heading-up navigatsiya uslubi, YandexMapKit standart qiymati
+          // ham shu, lekin bu yerda niyatni aniq ko'rsatish uchun yozilgan).
+          icon: PlacemarkIcon.single(PlacemarkIconStyle(
+            image: _truckIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
+            rotationType: RotationType.noRotation,
+          )),
+        ),
+      if (_finishIcon != null)
+        PlacemarkMapObject(
+          mapId: const MapObjectId('target_pos'),
+          point: Point(latitude: targetLat, longitude: targetLng),
+          icon: PlacemarkIcon.single(PlacemarkIconStyle(
+            image: _finishIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
+          )),
+        ),
+    ];
+  }
+
   Future<void> _updateTracking({bool fitToBounds = false}) async {
     if (_activeOrder == null || _currentPosition == null) return;
     final status = _activeOrder!['status'] as String;
@@ -475,58 +538,56 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         ? (_activeOrder!['fromLongitude'] as num).toDouble()
         : (_activeOrder!['toLongitude'] as num).toDouble();
 
-    final repo = ref.read(geocodeRepositoryProvider);
     final driverLat = _currentPosition!.latitude;
     final driverLng = _currentPosition!.longitude;
+    final driverPoint = Point(latitude: driverLat, longitude: driverLng);
 
-    final route = await repo.getRoute(fromLat: driverLat, fromLng: driverLng, toLat: targetLat, toLng: targetLng);
+    final needsFreshRoute = _savedRoutePoints == null ||
+        _distanceToPolyline(driverPoint, _savedRoutePoints!) > 150;
 
-    if (!mounted) return;
+    List<Point> points;
 
-    final points = route?.points
-            .map((c) => Point(latitude: c[0], longitude: c[1]))
-            .toList() ??
-        [
-          Point(latitude: driverLat, longitude: driverLng),
-          Point(latitude: targetLat, longitude: targetLng),
-        ];
+    if (needsFreshRoute) {
+      final repo = ref.read(geocodeRepositoryProvider);
+      final route = await repo.getRoute(fromLat: driverLat, fromLng: driverLng, toLat: targetLat, toLng: targetLng);
 
-    setState(() {
-      _routeDistKm = route?.distanceKm;
-      _routeTimeMin = route?.durationMin;
-      _initialDistanceKm ??= route?.distanceKm;
-      _mapObjects = [
-        PolylineMapObject(
-          mapId: const MapObjectId('driver_route'),
-          polyline: Polyline(points: points),
-          strokeColor: isPickup
-              ? (_isDark ? const Color(0xFF60A5FA) : const Color(0xFF1e3a8a))
-              : (_isDark ? const Color(0xFF34D399) : const Color(0xFF059669)),
-          strokeWidth: 5,
-        ),
-        if (_truckIcon != null)
-          PlacemarkMapObject(
-            mapId: const MapObjectId('driver_pos'),
-            point: Point(latitude: driverLat, longitude: driverLng),
-            // rotationType.noRotation — truck belgisi kamera (xarita) bilan
-            // birga AYLANMAYDI, ekranga nisbatan doim tepaga qarab turadi
-            // (heading-up navigatsiya uslubi, YandexMapKit standart qiymati
-            // ham shu, lekin bu yerda niyatni aniq ko'rsatish uchun yozilgan).
-            icon: PlacemarkIcon.single(PlacemarkIconStyle(
-              image: _truckIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
-              rotationType: RotationType.noRotation,
-            )),
-          ),
-        if (_finishIcon != null)
-          PlacemarkMapObject(
-            mapId: const MapObjectId('target_pos'),
-            point: Point(latitude: targetLat, longitude: targetLng),
-            icon: PlacemarkIcon.single(PlacemarkIconStyle(
-              image: _finishIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
-            )),
-          ),
-      ];
-    });
+      if (!mounted) return;
+
+      points = route?.points
+              .map((c) => Point(latitude: c[0], longitude: c[1]))
+              .toList() ??
+          [
+            driverPoint,
+            Point(latitude: targetLat, longitude: targetLng),
+          ];
+      _savedRoutePoints = points;
+
+      setState(() {
+        _routeDistKm = route?.distanceKm;
+        _routeTimeMin = route?.durationMin;
+        _initialDistanceKm ??= route?.distanceKm;
+        _mapObjects = _buildTrackingMapObjects(
+          points: points,
+          driverLat: driverLat,
+          driverLng: driverLng,
+          targetLat: targetLat,
+          targetLng: targetLng,
+          isPickup: isPickup,
+        );
+      });
+    } else {
+      points = _savedRoutePoints!;
+      setState(() {
+        _mapObjects = _buildTrackingMapObjects(
+          points: points,
+          driverLat: driverLat,
+          driverLng: driverLng,
+          targetLat: targetLat,
+          targetLng: targetLng,
+          isPickup: isPickup,
+        );
+      });
+    }
 
     if (fitToBounds) {
       _fitBounds(points);
@@ -569,6 +630,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _currentOfferId = null;
         _activeOrder = acceptedOrder;
         _initialDistanceKm = null;
+        _savedRoutePoints = null;
         _activeSheetExpanded = false;
       });
       _restartLocationTimer();
@@ -621,6 +683,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         setState(() {
           _activeOrder!['status'] = nextStatus;
           _initialDistanceKm = null;
+          _savedRoutePoints = null;
         });
         await _updateTracking(fitToBounds: true);
       }
@@ -643,6 +706,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       _routeDistKm = null;
       _routeTimeMin = null;
       _initialDistanceKm = null;
+      _savedRoutePoints = null;
       _activeSheetExpanded = false;
     });
     _restartLocationTimer();
