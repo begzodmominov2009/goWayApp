@@ -268,33 +268,41 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         });
       }
 
-      _locationTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
-        if (!_isOnline) return;
-        try {
-          final pos = await Geolocator.getCurrentPosition();
-          if (!mounted) return;
-          final prevPosition = _currentPosition;
-          if (prevPosition != null) {
-            final movedMeters = Geolocator.distanceBetween(
+      _restartLocationTimer();
+    } catch (_) {}
+  }
+
+  void _restartLocationTimer() {
+    _locationTimer?.cancel();
+    final interval = _activeOrder != null
+        ? const Duration(seconds: 4)
+        : const Duration(seconds: 16);
+    _locationTimer = Timer.periodic(interval, (_) async {
+      if (!_isOnline) return;
+      try {
+        final pos = await Geolocator.getCurrentPosition();
+        if (!mounted) return;
+        final prevPosition = _currentPosition;
+        if (prevPosition != null) {
+          final movedMeters = Geolocator.distanceBetween(
+            prevPosition.latitude, prevPosition.longitude, pos.latitude, pos.longitude,
+          );
+          if (movedMeters > 5) {
+            _currentBearing = _calculateBearing(
               prevPosition.latitude, prevPosition.longitude, pos.latitude, pos.longitude,
             );
-            if (movedMeters > 5) {
-              _currentBearing = _calculateBearing(
-                prevPosition.latitude, prevPosition.longitude, pos.latitude, pos.longitude,
-              );
-            }
           }
-          setState(() => _currentPosition = pos);
-          await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
-          if (_activeOrder != null) {
-            _updateTracking();
-          } else {
-            _updateMyLocationPin();
-            _followCamera(pos.latitude, pos.longitude);
-          }
-        } catch (_) {}
-      });
-    } catch (_) {}
+        }
+        setState(() => _currentPosition = pos);
+        await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
+        if (_activeOrder != null) {
+          _updateTracking();
+        } else {
+          _updateMyLocationPin();
+          _followCamera(pos.latitude, pos.longitude);
+        }
+      } catch (_) {}
+    });
   }
 
   void _showLocationDeniedNotice() {
@@ -538,6 +546,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _initialDistanceKm = null;
         _activeSheetExpanded = false;
       });
+      _restartLocationTimer();
 
       await _updateTracking(fitToBounds: true);
       _trackingTimer?.cancel();
@@ -580,6 +589,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           _initialDistanceKm = null;
           _activeSheetExpanded = false;
         });
+        _restartLocationTimer();
         _updateMyLocationPin();
         if (_isOnline) _startOfferPolling();
       } else {
@@ -610,6 +620,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       _initialDistanceKm = null;
       _activeSheetExpanded = false;
     });
+    _restartLocationTimer();
     _updateMyLocationPin();
     if (_isOnline) _startOfferPolling();
   }
