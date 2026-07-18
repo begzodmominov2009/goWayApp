@@ -97,6 +97,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   bool _onlineLoading = false;
   Position? _currentPosition;
   Timer? _locationTimer;
+  bool _gpsServiceWasEnabled = true;
   Timer? _offerTimer;
   Timer? _trackingTimer;
 
@@ -290,6 +291,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _locationTimer = Timer.periodic(interval, (_) async {
       if (!_isOnline) return;
       try {
+        final gpsServiceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!gpsServiceEnabled) {
+          if (_gpsServiceWasEnabled && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppStrings.get('gps_service_disabled_notice', ref.read(localeProvider).languageCode)),
+                backgroundColor: AppTheme.warningColor,
+              ),
+            );
+          }
+          _gpsServiceWasEnabled = false;
+          return;
+        }
+        _gpsServiceWasEnabled = true;
         final pos = await Geolocator.getCurrentPosition();
         if (!mounted) return;
         final prevPosition = _currentPosition;
