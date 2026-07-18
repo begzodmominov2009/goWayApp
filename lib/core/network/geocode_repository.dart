@@ -112,10 +112,9 @@ class GeocodeRepository {
   }
 
   /// Ikki nuqta orasidagi haqiqiy yo'l chizig'i, masofa va vaqtni
-  /// BIR SO'ROVDA, OSRM orqali oladi. OSRM haqiqiy yo'l tezlik
-  /// chegaralarini hisobga olib vaqtni hisoblaydi — shuning uchun
-  /// bu, backend orqali Haversine formula bilan taxminiy hisoblashdan
-  /// ancha aniqroq.
+  /// backend orqali (OpenRouteService asosida) oladi. API kalit
+  /// xavfsizlik uchun faqat backend'da saqlanadi — Flutter'dan
+  /// tashqi xizmatga to'g'ridan-to'g'ri so'rov yuborilmaydi.
   Future<RouteResult?> getRoute({
     required double fromLat,
     required double fromLng,
@@ -123,40 +122,37 @@ class GeocodeRepository {
     required double toLng,
   }) async {
     try {
-      final url = 'https://router.project-osrm.org/route/v1/driving/'
-          '$fromLng,$fromLat;$toLng,$toLat'
-          '?overview=full&geometries=geojson';
-      final osrmDio = Dio();
-      final res = await osrmDio.get(url);
+      final res = await _dio.get('/geocode/route', queryParameters: {
+        'fromLat': fromLat,
+        'fromLng': fromLng,
+        'toLat': toLat,
+        'toLng': toLng,
+      });
       final data = res.data;
 
-      if (data['code'] == 'Ok' && (data['routes'] as List).isNotEmpty) {
-        final route = data['routes'][0];
-        final coords = route['geometry']['coordinates'] as List;
+      if (data['success'] == false || data['points'] == null) return null;
 
-        final points = coords
-            .map<List<double>>((c) => [
-                  (c[1] as num).toDouble(),
-                  (c[0] as num).toDouble(),
-                ])
-            .toList();
+      final pointsRaw = data['points'] as List;
+      final points = pointsRaw
+          .map<List<double>>((p) => [
+                (p[0] as num).toDouble(),
+                (p[1] as num).toDouble(),
+              ])
+          .toList();
 
-        final distanceKm = (route['distance'] as num) / 1000;
-        final durationSec = (route['duration'] as num).toInt();
-        final durationMin = (durationSec / 60).round();
+      final distanceKm = (data['distanceKm'] as num).toDouble();
+      final durationMin = (data['durationMin'] as num).toInt();
 
-        final h = durationMin ~/ 60;
-        final m = durationMin % 60;
-        final durationText = h > 0 ? '$h soat $m daqiqa' : '$m daqiqa';
+      final h = durationMin ~/ 60;
+      final m = durationMin % 60;
+      final durationText = h > 0 ? '$h soat $m daqiqa' : '$m daqiqa';
 
-        return RouteResult(
-          distanceKm: distanceKm,
-          durationMin: durationMin,
-          durationText: durationText,
-          points: points,
-        );
-      }
-      return null;
+      return RouteResult(
+        distanceKm: distanceKm,
+        durationMin: durationMin,
+        durationText: durationText,
+        points: points,
+      );
     } catch (_) {
       return null;
     }
