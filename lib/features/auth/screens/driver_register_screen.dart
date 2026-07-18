@@ -133,7 +133,8 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
     }
 
     if (_passwordController.text.length < 6) {
-      setState(() => _error = 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak');
+      setState(
+          () => _error = 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak');
       return;
     }
 
@@ -142,7 +143,10 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
       return;
     }
 
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
     try {
       final driverRepo = ref.read(driverRepositoryProvider);
@@ -173,8 +177,7 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
 
       // 3. Parol saqlash
       await driverRepo.setPassword(_passwordController.text);
-
-      if (mounted) context.go(AppRoutes.pendingApproval);
+      if (mounted) context.go(AppRoutes.driverHome);
     } catch (e) {
       setState(() => _error = 'Xatolik yuz berdi. Qayta urinib ko\'ring.');
     } finally {
@@ -245,9 +248,8 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
                       color: isDark ? AppTheme.darkSurface : Colors.white,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: isDark
-                            ? AppTheme.darkBorder
-                            : AppTheme.borderColor,
+                        color:
+                            isDark ? AppTheme.darkBorder : AppTheme.borderColor,
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
@@ -303,8 +305,9 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
               ),
               inputFormatters: [
                 TextInputFormatter.withFunction((oldValue, newValue) {
-                  String clean =
-                      newValue.text.toUpperCase().replaceAll(RegExp(r'\s+'), '');
+                  String clean = newValue.text
+                      .toUpperCase()
+                      .replaceAll(RegExp(r'\s+'), '');
                   if (clean.isEmpty) return newValue;
 
                   String result = '';
@@ -314,8 +317,7 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
                   }
                   return TextEditingValue(
                     text: result,
-                    selection:
-                        TextSelection.collapsed(offset: result.length),
+                    selection: TextSelection.collapsed(offset: result.length),
                   );
                 }),
               ],
@@ -370,35 +372,63 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
             const SizedBox(height: 4),
             Text(
               'Keyingi safar kirish uchun parol kerak bo\'ladi',
-              style: TextStyle(fontSize: 12, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.textSecondary),
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _passwordController,
               obscureText: _obscure,
-              style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
-              decoration: _inputDecoration(hint: 'Kamida 6 ta belgi', isDark: isDark).copyWith(
+              style: TextStyle(
+                  color:
+                      isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
+              decoration:
+                  _inputDecoration(hint: 'Kamida 6 ta belgi', isDark: isDark)
+                      .copyWith(
                 suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary, size: 20),
+                  icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.textSecondary,
+                      size: 20),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
-              validator: (v) => v == null || v.length < 6 ? 'Kamida 6 ta belgi' : null,
+              validator: (v) =>
+                  v == null || v.length < 6 ? 'Kamida 6 ta belgi' : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _confirmPasswordController,
               obscureText: _obscureConfirm,
-              style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
-              decoration: _inputDecoration(hint: 'Parolni takrorlang', isDark: isDark).copyWith(
+              style: TextStyle(
+                  color:
+                      isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
+              decoration:
+                  _inputDecoration(hint: 'Parolni takrorlang', isDark: isDark)
+                      .copyWith(
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary, size: 20),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  icon: Icon(
+                      _obscureConfirm
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.textSecondary,
+                      size: 20),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
               ),
-              validator: (v) => v != _passwordController.text ? 'Parollar mos kelmaydi' : null,
+              validator: (v) => v != _passwordController.text
+                  ? 'Parollar mos kelmaydi'
+                  : null,
             ),
 
             if (_error != null) ...[
@@ -542,9 +572,8 @@ class _DocumentPicker extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? AppTheme.darkTextPrimary
-                      : AppTheme.textPrimary,
+                  color:
+                      isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
                 ),
               ),
             ),

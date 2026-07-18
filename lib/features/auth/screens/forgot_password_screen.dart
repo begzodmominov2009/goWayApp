@@ -9,6 +9,7 @@ import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
+import '../../../../core/services/fcm_service.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   final String? initialPhone;
@@ -21,17 +22,14 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
 
 class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   int _stage = 0;
-
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _loading = false;
   String? _error;
-
   int _seconds = 60;
   Timer? _timer;
 
@@ -55,7 +53,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   }
 
   String get _fullPhone => '+998${_phoneController.text.replaceAll(RegExp(r'\D'), '')}';
-
   bool get _isPhoneValid => _phoneController.text.replaceAll(RegExp(r'\D'), '').length >= 9;
 
   void _startTimer() {
@@ -110,11 +107,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
   }
 
+  // Yangi parol saqlangач, foydalanuvchini QAYTA LOGIN QILDIRMASDAN,
+  // yangi parol bilan avtomatik kirgizamiz va to'g'ridan-to'g'ri
+  // Home ekraniga o'tkazamiz.
   Future<void> _savePassword() async {
     final locale = ref.read(localeProvider).languageCode;
     final newPassword = _newPasswordController.text;
     final confirmPassword = _confirmPasswordController.text;
-
     if (newPassword.length < 6) {
       setState(() => _error = AppStrings.get('password_too_short', locale));
       return;
@@ -123,7 +122,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       setState(() => _error = AppStrings.get('password_mismatch', locale));
       return;
     }
-
     setState(() {
       _loading = true;
       _error = null;
@@ -135,11 +133,43 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         code: _otpController.text,
         newPassword: newPassword,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppStrings.get('password_changed', locale))),
-        );
-        context.go(AppRoutes.phone, extra: widget.role);
+
+      final res = await authRepo.loginWithPassword(
+        phone: _fullPhone,
+        password: newPassword,
+      );
+
+      if (res['success'] == true) {
+        final token = res['data']['accessToken'] ?? res['data']['token'];
+        final refreshToken = res['data']['refreshToken'] as String?;
+        final user = res['data']['user'];
+        final role = user['role'] as String;
+
+        await authRepo.saveToken(token);
+        if (refreshToken != null) {
+          await authRepo.saveRefreshToken(refreshToken);
+        }
+        await authRepo.saveRole(role);
+
+        FcmService.init(ref);
+
+        if (mounted) {
+          if (role == 'CLIENT') {
+            final client = res['data']['client'];
+            if (client == null || client['fullName'] == null) {
+              context.go(AppRoutes.clientRegister);
+            } else {
+              context.go(AppRoutes.clientHome);
+            }
+          } else if (role == 'DRIVER') {
+            final driver = res['data']['driver'];
+            if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
+              context.go(AppRoutes.driverRegister);
+            } else {
+              context.go(AppRoutes.driverHome);
+            }
+          }
+        }
       }
     } catch (e) {
       setState(() {
@@ -294,7 +324,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
       ),
     );
-
     return [
       Center(
         child: Pinput(

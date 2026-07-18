@@ -16,9 +16,9 @@ class RatingRepository {
     required int score,
     String? note,
   }) async {
-    await _dio.post('/orders/$orderId/rate', data: {
-      'clientScore': score,
-      if (note != null && note.isNotEmpty) 'clientNote': note,
+    await _dio.post('/orders/$orderId/rating', data: {
+      'score': score,
+      if (note != null && note.isNotEmpty) 'note': note,
     });
   }
 
@@ -28,9 +28,9 @@ class RatingRepository {
     required int score,
     String? note,
   }) async {
-    await _dio.post('/orders/$orderId/rate', data: {
-      'driverScore': score,
-      if (note != null && note.isNotEmpty) 'driverNote': note,
+    await _dio.post('/orders/$orderId/rating', data: {
+      'score': score,
+      if (note != null && note.isNotEmpty) 'note': note,
     });
   }
 }
