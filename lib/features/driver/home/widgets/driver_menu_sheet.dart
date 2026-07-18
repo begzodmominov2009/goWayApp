@@ -95,6 +95,24 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
               context.push(AppRoutes.driverProfile);
             },
           ),
+          _MenuTile(
+            icon: Icons.feedback_outlined,
+            label: AppStrings.get('feedback', locale),
+            isDark: isDark,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.feedback);
+            },
+          ),
+          _MenuTile(
+            icon: Icons.help_outline,
+            label: AppStrings.get('faq', locale),
+            isDark: isDark,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.faq);
+            },
+          ),
           Divider(height: 8, color: border, indent: 20, endIndent: 20),
           _MenuTile(
             icon: Icons.language_outlined,

@@ -32,6 +32,8 @@ import '../../features/driver/settings/screens/driver_settings_screen.dart';
 import '../../shared/screens/chat_screen.dart';
 import '../../shared/screens/terms_screen.dart';
 import '../../shared/screens/notifications_screen.dart';
+import '../../shared/screens/feedback_screen.dart';
+import '../../shared/screens/faq_screen.dart';
 
 class AppRoutes {
   static const splash = '/';
@@ -67,6 +69,8 @@ class AppRoutes {
   static const chat = '/chat/:orderId';
   static const terms = '/terms';
   static const notifications = '/notifications';
+  static const feedback = '/feedback';
+  static const faq = '/faq';
 }
 
 // Sahifalar orasida o'tishni kuzatish uchun — Home ekranidagi
@@ -309,6 +313,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.notifications,
         pageBuilder: (context, state) => _slidePage(const NotificationsScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.feedback,
+        pageBuilder: (context, state) => _slidePage(const FeedbackScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.faq,
+        pageBuilder: (context, state) => _slidePage(const FaqScreen(), state),
       ),
     ],
   );

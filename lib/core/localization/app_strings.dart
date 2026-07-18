@@ -288,6 +288,16 @@ class AppStrings {
       'terms_subtitle': 'Foydalanish shartlari va maxfiylik siyosati',
       'avatar_preview_only_notice': 'Rasm faqat oldindan ko\'rsatilmoqda (hali serverga saqlanmaydi)',
       'avatar_upload_failed': 'Rasmni yuklashda xatolik yuz berdi',
+      // ==== Fikr-mulohaza / FAQ ====
+      'feedback': 'Fikr-mulohaza',
+      'feedback_subtitle': 'Fikringizni bizga bildiring',
+      'feedback_intro': 'Platformamizni yaxshilash uchun fikringizni bilishni istaymiz. Takliflaringiz to\'g\'ridan-to\'g\'ri jamoamizga yetib boradi.',
+      'feedback_placeholder': 'Fikringizni shu yerga yozing...',
+      'add_image': '+ Rasm qo\'shish',
+      'send': 'Yuborish',
+      'feedback_success': 'Rahmat! Fikringiz yuborildi',
+      'faq': 'Ko\'p so\'raladigan savollar',
+      'faq_subtitle': 'Javoblarni shu yerdan toping',
     },
     'ru': {
       'select_language': 'Выберите язык',
@@ -577,6 +587,16 @@ class AppStrings {
       'terms_subtitle': 'Условия использования и конфиденциальность',
       'avatar_preview_only_notice': 'Изображение только для предпросмотра (пока не сохраняется на сервере)',
       'avatar_upload_failed': 'Не удалось загрузить изображение',
+      // ==== Обратная связь / FAQ ====
+      'feedback': 'Обратная связь',
+      'feedback_subtitle': 'Поделитесь своим мнением',
+      'feedback_intro': 'Мы хотим услышать ваше мнение об улучшении платформы. Ваши предложения напрямую попадают в нашу команду.',
+      'feedback_placeholder': 'Напишите свой отзыв здесь...',
+      'add_image': '+ Добавить фото',
+      'send': 'Отправить',
+      'feedback_success': 'Спасибо! Ваш отзыв отправлен',
+      'faq': 'Часто задаваемые вопросы',
+      'faq_subtitle': 'Найдите ответы здесь',
     },
     'en': {
       'select_language': 'Choose language',
@@ -866,6 +886,16 @@ class AppStrings {
       'terms_subtitle': 'Terms of use and privacy policy',
       'avatar_preview_only_notice': 'Preview only — not yet saved to the server',
       'avatar_upload_failed': 'Failed to upload photo',
+      // ==== Feedback / FAQ ====
+      'feedback': 'Feedback',
+      'feedback_subtitle': 'Share your thoughts with us',
+      'feedback_intro': "We'd love to hear your thoughts on improving our platform. Your suggestions go straight to our team.",
+      'feedback_placeholder': 'Write your feedback here...',
+      'add_image': '+ Add photo',
+      'send': 'Send',
+      'feedback_success': 'Thank you! Your feedback has been sent',
+      'faq': 'Frequently Asked Questions',
+      'faq_subtitle': 'Find answers here',
     },
   };
 
