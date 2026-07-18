@@ -152,6 +152,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       final profile = await ref.read(driverRepositoryProvider).getProfile();
       final backendOnline = profile['isOnline'] == true;
       if (!mounted || backendOnline == _isOnline) return;
+      final wentAutoOffline = _isOnline && !backendOnline;
       setState(() {
         _isOnline = backendOnline;
         if (!_isOnline) {
@@ -162,6 +163,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         }
       });
       if (_isOnline) _startOfferPolling();
+      if (wentAutoOffline && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.get('auto_offline_notice', ref.read(localeProvider).languageCode)),
+            backgroundColor: AppTheme.warningColor,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (_) {}
   }
 
