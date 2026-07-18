@@ -11,6 +11,11 @@ import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 /// Foydalanuvchining saqlangan manzillarini to'liq boshqarish sahifasi —
 /// qo'shish, tahrirlash va o'chirish shu yerda amalga oshiriladi. Tezkor
 /// kirish uchun qisqa ro'yxat select_address_screen.dart da ham ko'rsatiladi.
@@ -73,6 +78,7 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => const _AddressFormSheet(),
     );
     if (saved == true) _load();
@@ -83,6 +89,7 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => _AddressFormSheet(existing: item),
     );
     if (saved == true) _load();

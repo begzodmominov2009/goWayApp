@@ -7,6 +7,11 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 enum _FilterType { all, pending, accepted, cancelled }
 
 class ClientOrdersScreen extends ConsumerStatefulWidget {
@@ -170,6 +175,7 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
       context: context,
       backgroundColor: surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),

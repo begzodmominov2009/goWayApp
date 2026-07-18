@@ -23,6 +23,11 @@ import '../widgets/client_menu_sheet.dart';
 const double _kMinZoom = 3.0;
 const double _kMaxZoom = 20.0;
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class ClientHomeScreen extends ConsumerStatefulWidget {
   const ClientHomeScreen({super.key});
 
@@ -447,6 +452,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => const ClientMenuSheet(),
     );
   }
@@ -1052,6 +1058,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       isScrollControlled: true,
       backgroundColor: surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).padding.bottom + 20),
         child: Column(

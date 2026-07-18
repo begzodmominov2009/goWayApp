@@ -16,6 +16,11 @@ import '../../../../shared/widgets/driver_avatar.dart';
 
 const List<String> _kLiveTrackedStatuses = ['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'];
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 /// Aktiv buyurtma — to'liq tafsilotlar sahifasi. Xarita ustida joriy
 /// haydovchi joylashuvi (LIVE) va marshrut, pastda esa haydovchi
 /// ma'lumotlari, "Route Summary" va yuk kartochkalari ko'rsatiladi.
@@ -246,6 +251,7 @@ class _ActiveOrderDetailsScreenState extends ConsumerState<ActiveOrderDetailsScr
       backgroundColor: Colors.transparent,
       isDismissible: false,
       enableDrag: false,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => RatingDialog(
         title: 'Haydovchini baholang',
         subtitle: driver != null ? (driver['fullName'] as String? ?? '') : '',

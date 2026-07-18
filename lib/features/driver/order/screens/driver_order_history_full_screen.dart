@@ -9,6 +9,11 @@ import '../../../../core/network/driver_repository.dart';
 
 enum _HistoryFilter { all, delivered, cancelled }
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class DriverOrderHistoryFullScreen extends ConsumerStatefulWidget {
   const DriverOrderHistoryFullScreen({super.key});
 
@@ -165,6 +170,7 @@ class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistor
       context: context,
       backgroundColor: surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),

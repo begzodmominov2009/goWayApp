@@ -10,6 +10,11 @@ import '../../../../core/network/notification_repository.dart';
 import '../../../../core/providers/active_order_provider.dart';
 import '../../../../core/router/app_router.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class ClientMenuSheet extends ConsumerStatefulWidget {
   const ClientMenuSheet({super.key});
 
@@ -140,6 +145,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(localeProvider).languageCode;
         return Padding(
@@ -179,6 +185,7 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(themeModeProvider);
         return Padding(

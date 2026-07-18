@@ -9,6 +9,11 @@ import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/router/app_router.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class DriverWalletScreen extends ConsumerStatefulWidget {
   const DriverWalletScreen({super.key});
 
@@ -46,6 +51,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => _TopupSheet(
         isDark: isDark,
         onClose: () => Navigator.pop(ctx),

@@ -7,6 +7,11 @@ import '../../../../core/network/driver_repository.dart';
 
 enum _TopupFilter { all, pending, approved, rejected }
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class TopupRequestHistoryScreen extends ConsumerStatefulWidget {
   const TopupRequestHistoryScreen({super.key});
 
@@ -86,6 +91,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
       context: context,
       backgroundColor: surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).padding.bottom + 24),
         child: Column(

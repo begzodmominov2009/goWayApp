@@ -12,6 +12,11 @@ import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/auth_repository.dart';
 import '../../../../core/router/app_router.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class ClientProfileScreen extends ConsumerStatefulWidget {
   const ClientProfileScreen({super.key});
   @override
@@ -398,6 +403,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         bool saving = false;
         return StatefulBuilder(
@@ -475,6 +481,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           final surface = isDark ? AppTheme.darkSurface : Colors.white;
@@ -615,6 +622,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(localeProvider).languageCode;
         return Padding(
@@ -670,6 +678,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(themeModeProvider);
         return Padding(

@@ -13,6 +13,11 @@ import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/auth_repository.dart';
 import '../../../../core/router/app_router.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 class DriverProfileScreen extends ConsumerStatefulWidget {
   const DriverProfileScreen({super.key});
   @override
@@ -411,6 +416,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       backgroundColor: Colors.transparent,
       isDismissible: false,
       enableDrag: false,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => _VehicleEditSheet(
         profile: _profile,
         trucks: _trucks,
@@ -428,6 +434,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       isScrollControlled: true,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         bool saving = false;
         return StatefulBuilder(
@@ -486,6 +493,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => _ChangePasswordSheet(isDark: isDark, locale: locale),
     );
   }
@@ -496,6 +504,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(localeProvider).languageCode;
         return Padding(
@@ -536,6 +545,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         final current = ref.read(themeModeProvider);
         return Padding(
