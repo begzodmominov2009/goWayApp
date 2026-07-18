@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'shared/widgets/app_loading_indicator.dart';
+import 'shared/widgets/no_internet_overlay.dart';
 import 'core/router/app_router.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/utils/map_icon_helper.dart';
@@ -92,6 +93,7 @@ class _GoWayAppState extends ConsumerState<GoWayApp> {
                   ),
                 ),
               ),
+            const NoInternetOverlay(),
           ],
         );
       },
