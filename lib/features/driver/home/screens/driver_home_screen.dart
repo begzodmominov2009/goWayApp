@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
@@ -115,6 +116,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   double _currentStepRemainingMeters = 0;
   List<MapObject> _mapObjects = [];
   bool _activeSheetExpanded = false;
+
+  final FlutterTts _tts = FlutterTts();
+  int? _lastAnnouncedStepIndex;
+  bool _announced250 = false;
+  bool _announced50 = false;
+  bool _announcedTurnPoint = false;
+  String? _ttsLastLocale;
 
   int _unreadNotifCount = 0;
   Timer? _notifCountTimer;
@@ -332,12 +340,17 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
               _savedRoutePoints!,
             );
            final info = _stepInfoForDistance(traveled);
-            if (mounted && (info.stepIndex != _currentStepIndex || info.remainingMeters != _currentStepRemainingMeters)) {
+            final stepChanged = info.stepIndex != _currentStepIndex;
+            if (mounted && (stepChanged || info.remainingMeters != _currentStepRemainingMeters)) {
               setState(() {
                 _currentStepIndex = info.stepIndex;
                 _currentStepRemainingMeters = info.remainingMeters;
               });
             }
+            if (stepChanged) {
+              unawaited(_announceStraightSegment(info.stepIndex));
+            }
+            unawaited(_announceNavigation(info.stepIndex, info.remainingMeters));
           }
         } else {
           _updateMyLocationPin();
@@ -547,6 +560,116 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     }
     final lastIdx = _currentSteps.isEmpty ? 0 : _currentSteps.length - 1;
     return (stepIndex: lastIdx, remainingMeters: 0);
+  }
+
+  // TTS ovoz tilini, ilova joriy tiliga mos DINAMIK sozlaydi (faqat til
+  // o'zgarganda yoki birinchi ishlatishda amalga oshiriladi).
+  Future<void> _configureTtsForLocale(String locale) async {
+    if (_ttsLastLocale == locale) return;
+    _ttsLastLocale = locale;
+
+    String ttsLanguage;
+    switch (locale) {
+      case 'ru':
+        ttsLanguage = 'ru-RU';
+        break;
+      case 'en':
+        ttsLanguage = 'en-US';
+        break;
+      default:
+        ttsLanguage = 'uz-UZ';
+    }
+
+    try {
+      // Avval, so'ralgan tilni sinab ko'r. Agar telefon TTS mexanizmi
+      // shu tilni QO'LLAB-QUVVATLAMASA (masalan uz-UZ ba'zi qurilmalarda
+      // yo'q bo'lishi mumkin), inglizchaga zaxira qilamiz.
+      final isAvailable = await _tts.isLanguageAvailable(ttsLanguage);
+      await _tts.setLanguage(isAvailable == true ? ttsLanguage : 'en-US');
+
+      // Ayol ovozini tanlash — mavjud ovozlar ro'yxatidan, "female" so'zi
+      // bor yoki standart ayol ovozi hisoblangan birini tanlashga harakat
+      // qilamiz. Agar aniq topib bo'lmasa, standart ovozda qoldiramiz
+      // (xato bermaydi, faqat ayol ovozi kafolatlanmaydi).
+      try {
+        final voices = await _tts.getVoices as List?;
+        if (voices != null) {
+          final femaleVoice = voices.firstWhere(
+            (v) =>
+                (v['locale']?.toString().startsWith(ttsLanguage.split('-')[0]) ?? false) &&
+                (v['name']?.toString().toLowerCase().contains('female') ?? false),
+            orElse: () => null,
+          );
+          if (femaleVoice != null) {
+            await _tts.setVoice({'name': femaleVoice['name'], 'locale': femaleVoice['locale']});
+          }
+        }
+      } catch (_) {}
+
+      await _tts.setSpeechRate(0.5);
+      await _tts.setPitch(1.1); // Biroz balandroq pitch, ayol ovoziga yaqinroq
+    } catch (_) {}
+  }
+
+  Future<void> _announceNavigation(int stepIndex, double remainingMeters) async {
+    if (_currentSteps.isEmpty || stepIndex >= _currentSteps.length) return;
+    final locale = ref.read(localeProvider).languageCode;
+    await _configureTtsForLocale(locale);
+
+    final instruction = (_currentSteps[stepIndex]['instruction'] as String? ?? '').toLowerCase();
+
+    String direction;
+    if (instruction.contains('left')) {
+      direction = AppStrings.get('voice_turn_left', locale);
+    } else if (instruction.contains('right')) {
+      direction = AppStrings.get('voice_turn_right', locale);
+    } else {
+      direction = AppStrings.get('voice_continue', locale);
+    }
+
+    if (_lastAnnouncedStepIndex != stepIndex) {
+      _lastAnnouncedStepIndex = stepIndex;
+      _announced250 = false;
+      _announced50 = false;
+      _announcedTurnPoint = false;
+    }
+
+    try {
+      if (remainingMeters <= 20 && !_announcedTurnPoint) {
+        _announcedTurnPoint = true;
+        await _tts.speak(direction);
+      } else if (remainingMeters <= 50 && remainingMeters > 20 && !_announced50) {
+        _announced50 = true;
+        final text = AppStrings.get('voice_distance_then_turn', locale)
+            .replaceAll('{dist}', '50')
+            .replaceAll('{direction}', direction);
+        await _tts.speak(text);
+      } else if (remainingMeters <= 250 && remainingMeters > 50 && !_announced250) {
+        _announced250 = true;
+        final text = AppStrings.get('voice_distance_then_turn', locale)
+            .replaceAll('{dist}', '250')
+            .replaceAll('{direction}', direction);
+        await _tts.speak(text);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _announceStraightSegment(int stepIndex) async {
+    if (_currentSteps.isEmpty || stepIndex >= _currentSteps.length) return;
+    final stepDist = (_currentSteps[stepIndex]['distanceMeters'] as num?)?.toDouble() ?? 0;
+    if (stepDist < 500) return;
+
+    final locale = ref.read(localeProvider).languageCode;
+    await _configureTtsForLocale(locale);
+
+    final km = stepDist / 1000;
+    final distText = km >= 1
+        ? '${km.toStringAsFixed(1)} km'
+        : '${stepDist.round()} m';
+    final text = AppStrings.get('voice_go_straight', locale).replaceAll('{dist}', distText);
+    try {
+      await _tts.speak(text);
+    } catch (_) {}
   }
 
   List<MapObject> _buildTrackingMapObjects({

@@ -301,6 +301,12 @@ class AppStrings {
       'feedback_success': 'Rahmat! Fikringiz yuborildi',
       'faq': 'Ko\'p so\'raladigan savollar',
       'faq_subtitle': 'Javoblarni shu yerdan toping',
+      // ==== Ovozli navigatsiya (TTS) ====
+      'voice_turn_left': 'chapga buriling',
+      'voice_turn_right': 'o\'ngga buriling',
+      'voice_continue': 'to\'g\'riga yuring',
+      'voice_distance_then_turn': '{dist} metrdan keyin, {direction}',
+      'voice_go_straight': 'to\'g\'riga, {dist} harakatlaning',
     },
     'ru': {
       'select_language': 'Выберите язык',
@@ -603,6 +609,12 @@ class AppStrings {
       'feedback_success': 'Спасибо! Ваш отзыв отправлен',
       'faq': 'Часто задаваемые вопросы',
       'faq_subtitle': 'Найдите ответы здесь',
+      // ==== Голосовая навигация (TTS) ====
+      'voice_turn_left': 'поверните налево',
+      'voice_turn_right': 'поверните направо',
+      'voice_continue': 'продолжайте прямо',
+      'voice_distance_then_turn': 'через {dist} метров, {direction}',
+      'voice_go_straight': 'двигайтесь прямо {dist}',
     },
     'en': {
       'select_language': 'Choose language',
@@ -905,6 +917,12 @@ class AppStrings {
       'feedback_success': 'Thank you! Your feedback has been sent',
       'faq': 'Frequently Asked Questions',
       'faq_subtitle': 'Find answers here',
+      // ==== Voice navigation (TTS) ====
+      'voice_turn_left': 'turn left',
+      'voice_turn_right': 'turn right',
+      'voice_continue': 'continue straight',
+      'voice_distance_then_turn': 'in {dist} meters, {direction}',
+      'voice_go_straight': 'continue straight for {dist}',
     },
   };
 
