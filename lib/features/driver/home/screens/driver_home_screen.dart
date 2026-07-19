@@ -887,50 +887,44 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: (_activeOrder != null && _currentSteps.isNotEmpty)
-                              ? _TurnByTurnPanel(
-                                  step: _currentSteps[_currentStepIndex.clamp(0, _currentSteps.length - 1)],
-                                  stepIndex: _currentStepIndex,
-                                  locale: locale,
-                                )
-                              : Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: surface,
-                                    borderRadius: BorderRadius.circular(24),
-                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Container(
-                                            width: 22, height: 22,
-                                            decoration: const BoxDecoration(
-                                              gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text('GoWay',
-                                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                        ],
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: surface,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 22, height: 22,
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
+                                        shape: BoxShape.circle,
                                       ),
-                                      if (_currentAddressLabel.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _currentAddressLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(fontSize: 12, color: textSecondary),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                      child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text('GoWay',
+                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                                  ],
                                 ),
+                                if (_currentAddressLabel.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _currentAddressLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 12, color: textSecondary),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -1008,6 +1002,17 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
               child: GestureDetector(
                 onTap: () => setState(() => _activeSheetExpanded = false),
                 child: Container(color: Colors.black.withOpacity(0.35)),
+              ),
+            ),
+
+          if (_activeOrder != null && _currentSteps.isNotEmpty && !_activeSheetExpanded)
+            Positioned(
+              left: 16, right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 74,
+              child: _TurnByTurnPanel(
+                step: _currentSteps[_currentStepIndex.clamp(0, _currentSteps.length - 1)],
+                stepIndex: _currentStepIndex,
+                locale: locale,
               ),
             ),
 
@@ -1121,7 +1126,7 @@ class _TurnByTurnPanel extends StatelessWidget {
     final text = AppStrings.get(textKey, locale).replaceAll('{dist}', _formatStepDistance(distanceMeters));
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)],
@@ -2117,6 +2122,16 @@ class _ActiveOrderSheet extends ConsumerWidget {
                               clipBehavior: Clip.none,
                               children: [
                                 Container(width: 2, height: 30, color: border),
+                                Align(
+                                  alignment: Alignment.topCenter,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 650),
+                                    curve: Curves.easeInOut,
+                                    width: 2,
+                                    height: (routeProgress * (30 - 16)) + 8,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
                                 AnimatedPositioned(
                                   duration: const Duration(milliseconds: 650),
                                   curve: Curves.easeInOut,
@@ -2354,6 +2369,13 @@ class _MiniProgressTrack extends StatelessWidget {
                 width: double.infinity,
                 decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
               ),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.easeInOut,
+                height: 3,
+                width: (progress * travel) + dot / 2,
+                decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(2)),
+              ),
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 650),
                 curve: Curves.easeInOut,
@@ -2367,7 +2389,7 @@ class _MiniProgressTrack extends StatelessWidget {
                     border: Border.all(color: isDark ? AppTheme.darkSurface : Colors.white, width: 2),
                   ),
                   child: Transform.rotate(
-                    angle: math.pi,
+                    angle: math.pi / 2,
                     child: const Icon(Icons.navigation, size: 7, color: Colors.white),
                   ),
                 ),
