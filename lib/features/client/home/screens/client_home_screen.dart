@@ -474,22 +474,21 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     final targetLat = isPickup ? _fromLat : (_activeOrder!['toLatitude'] as num).toDouble();
     final targetLng = isPickup ? _fromLng : (_activeOrder!['toLongitude'] as num).toDouble();
 
-    final repo = ref.read(geocodeRepositoryProvider);
-    final route = await repo.getRoute(fromLat: driverLat, fromLng: driverLng, toLat: targetLat, toLng: targetLng);
+    final rawRoutePoints = _activeOrder!['routePoints'] as List?;
+    final points = (rawRoutePoints != null && rawRoutePoints.isNotEmpty)
+        ? rawRoutePoints
+            .map((p) => Point(latitude: (p[0] as num).toDouble(), longitude: (p[1] as num).toDouble()))
+            .toList()
+        : [
+            Point(latitude: driverLat, longitude: driverLng),
+            Point(latitude: targetLat, longitude: targetLng),
+          ];
 
     if (!mounted) return;
 
-    final points = route?.points
-            .map((c) => Point(latitude: c[0], longitude: c[1]))
-            .toList() ??
-        [
-          Point(latitude: driverLat, longitude: driverLng),
-          Point(latitude: targetLat, longitude: targetLng),
-        ];
-
     setState(() {
-      _driverEtaKm = route?.distanceKm;
-      _driverEtaMin = route?.durationMin;
+      _driverEtaKm = (_activeOrder!['liveDistanceKm'] as num?)?.toDouble();
+      _driverEtaMin = (_activeOrder!['liveDurationMin'] as num?)?.toInt();
       _mapObjects = [
         PolylineMapObject(
           mapId: const MapObjectId('driver_track'),

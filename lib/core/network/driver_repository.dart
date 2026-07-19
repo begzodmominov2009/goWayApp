@@ -210,4 +210,17 @@ class DriverRepository {
     });
     await _dio.post('/driver/avatar', data: formData);
   }
+
+  Future<void> updateOrderRoute(
+    String orderId,
+    List<List<double>> points, {
+    double? distanceKm,
+    int? durationMin,
+  }) async {
+    await _dio.post('/driver/orders/$orderId/route', data: {
+      'routePoints': points,
+      if (distanceKm != null) 'distanceKm': distanceKm,
+      if (durationMin != null) 'durationMin': durationMin,
+    });
+  }
 }

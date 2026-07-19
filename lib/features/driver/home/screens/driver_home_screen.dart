@@ -562,6 +562,16 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           ];
       _savedRoutePoints = points;
 
+      final orderId = _activeOrder!['id'] as String;
+      unawaited(
+        ref.read(driverRepositoryProvider).updateOrderRoute(
+              orderId,
+              points.map((p) => [p.latitude, p.longitude]).toList(),
+              distanceKm: _routeDistKm,
+              durationMin: _routeTimeMin,
+            ).catchError((_) {}),
+      );
+
       setState(() {
         _routeDistKm = route?.distanceKm;
         _routeTimeMin = route?.durationMin;
@@ -1069,6 +1079,18 @@ class _LiveTrackingPanel extends StatelessWidget {
   }
 }
 
+String _formatDuration(int minutes, String locale) {
+  if (minutes < 60) {
+    return '$minutes ${AppStrings.get('route_time_min', locale)}';
+  }
+  final hours = minutes ~/ 60;
+  final mins = minutes % 60;
+  if (mins == 0) {
+    return '$hours ${AppStrings.get('route_time_hour', locale)}';
+  }
+  return '$hours ${AppStrings.get('route_time_hour', locale)} $mins ${AppStrings.get('route_time_min', locale)}';
+}
+
 class _RouteInfoRow extends StatelessWidget {
   final double distKm;
   final int? timeMin;
@@ -1096,9 +1118,7 @@ class _RouteInfoRow extends StatelessWidget {
           Icon(Icons.access_time, size: 14, color: textSecondary),
           const SizedBox(width: 5),
           Text(
-            timeMin! >= 60
-                ? '${timeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${timeMin! % 60}${AppStrings.get('route_time_min', locale)}'
-                : '$timeMin ${AppStrings.get('route_time_min', locale)}',
+            _formatDuration(timeMin!, locale),
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
           ),
         ],
@@ -2134,7 +2154,9 @@ class _ActiveOrderMiniPanel extends StatelessWidget {
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
 
     final distLabel = distKm != null ? distKm!.toStringAsFixed(1) : '--';
-    final timeLabel = timeMin != null ? '$timeMin' : '--';
+    final timeLabel = timeMin != null
+        ? _formatDuration(timeMin!, locale)
+        : '-- ${AppStrings.get('route_time_min', locale)}';
 
     return GestureDetector(
       onTap: onDetail,
@@ -2157,7 +2179,7 @@ class _ActiveOrderMiniPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$distLabel km · $timeLabel ${AppStrings.get('route_time_min', locale)}',
+                    '$distLabel km · $timeLabel',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textP),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
