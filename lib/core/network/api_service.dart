@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
-const String baseUrl = 'http://172.20.10.4:3000/api/v1';
+const String baseUrl = 'http://192.168.1.4:3000/api/v1';
 
 // Bir vaqtda bir nechta so'rov 401 olsa, ularning barchasi BIR MARTA
 // refresh so'rasin (parallel, ortiqcha refresh so'rovlarining oldini

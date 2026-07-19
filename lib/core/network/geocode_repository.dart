@@ -59,12 +59,14 @@ class RouteResult {
   final int durationMin;
   final String durationText;
   final List<List<double>> points;
+  final List<Map<String, dynamic>> steps;
 
   RouteResult({
     required this.distanceKm,
     required this.durationMin,
     required this.durationText,
     required this.points,
+    required this.steps,
   });
 }
 
@@ -147,11 +149,18 @@ class GeocodeRepository {
       final m = durationMin % 60;
       final durationText = h > 0 ? '$h soat $m daqiqa' : '$m daqiqa';
 
+      final stepsRaw = data['steps'] as List?;
+      final steps = stepsRaw
+              ?.map<Map<String, dynamic>>((s) => Map<String, dynamic>.from(s as Map))
+              .toList() ??
+          <Map<String, dynamic>>[];
+
       return RouteResult(
         distanceKm: distanceKm,
         durationMin: durationMin,
         durationText: durationText,
         points: points,
+        steps: steps,
       );
     } catch (_) {
       return null;

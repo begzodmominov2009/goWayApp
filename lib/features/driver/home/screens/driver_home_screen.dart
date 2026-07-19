@@ -110,6 +110,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   int? _routeTimeMin;
   double? _initialDistanceKm;
   List<Point>? _savedRoutePoints;
+  List<Map<String, dynamic>> _currentSteps = [];
+  int _currentStepIndex = 0;
   List<MapObject> _mapObjects = [];
   bool _activeSheetExpanded = false;
 
@@ -323,6 +325,16 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
         if (_activeOrder != null) {
           _updateTracking();
+          if (_savedRoutePoints != null && _currentSteps.isNotEmpty) {
+            final traveled = _distanceAlongPolyline(
+              Point(latitude: pos.latitude, longitude: pos.longitude),
+              _savedRoutePoints!,
+            );
+            final newStepIndex = _stepIndexForDistance(traveled);
+            if (mounted && newStepIndex != _currentStepIndex) {
+              setState(() => _currentStepIndex = newStepIndex);
+            }
+          }
         } else {
           _updateMyLocationPin();
           _followCamera(pos.latitude, pos.longitude);
@@ -485,6 +497,45 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     return minDistance;
   }
 
+  // Driverning marshrut bo'ylab necha metr bosib o'tganini topadi: eng
+  // yaqin segmentni (_distanceToPolyline bilan bir xil mantiq) aniqlab,
+  // marshrut boshidan o'sha segmentgacha bo'lgan masofalarni yig'indilaydi.
+  double _distanceAlongPolyline(Point point, List<Point> polyline) {
+    if (polyline.length < 2) return 0;
+    int bestIndex = 0;
+    double bestDist = double.infinity;
+    for (int i = 0; i < polyline.length - 1; i++) {
+      final dist = _distanceToSegment(point, polyline[i], polyline[i + 1]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = i;
+      }
+    }
+    double traveled = 0;
+    for (int i = 0; i < bestIndex; i++) {
+      traveled += Geolocator.distanceBetween(
+        polyline[i].latitude, polyline[i].longitude,
+        polyline[i + 1].latitude, polyline[i + 1].longitude,
+      );
+    }
+    traveled += Geolocator.distanceBetween(
+      polyline[bestIndex].latitude, polyline[bestIndex].longitude,
+      point.latitude, point.longitude,
+    );
+    return traveled;
+  }
+
+  // Bosib o'tilgan masofani, har bir "step" ning distanceMeters qiymatini
+  // yig'indilab, mos step indeksiga aylantiradi.
+  int _stepIndexForDistance(double traveledMeters) {
+    double cumulative = 0;
+    for (int i = 0; i < _currentSteps.length; i++) {
+      cumulative += (_currentSteps[i]['distanceMeters'] as num?)?.toDouble() ?? 0;
+      if (traveledMeters <= cumulative) return i;
+    }
+    return _currentSteps.isEmpty ? 0 : _currentSteps.length - 1;
+  }
+
   List<MapObject> _buildTrackingMapObjects({
     required List<Point> points,
     required double driverLat,
@@ -576,6 +627,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _routeDistKm = route?.distanceKm;
         _routeTimeMin = route?.durationMin;
         _initialDistanceKm ??= route?.distanceKm;
+        _currentSteps = route?.steps ?? [];
+        _currentStepIndex = 0;
         _mapObjects = _buildTrackingMapObjects(
           points: points,
           driverLat: driverLat,
@@ -834,44 +887,50 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: surface,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 22, height: 22,
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text('GoWay',
-                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                  ],
-                                ),
-                                if (_currentAddressLabel.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _currentAddressLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 12, color: textSecondary),
+                          child: (_activeOrder != null && _currentSteps.isNotEmpty)
+                              ? _TurnByTurnPanel(
+                                  step: _currentSteps[_currentStepIndex.clamp(0, _currentSteps.length - 1)],
+                                  stepIndex: _currentStepIndex,
+                                  locale: locale,
+                                )
+                              : Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: surface,
+                                    borderRadius: BorderRadius.circular(24),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
                                   ),
-                                ],
-                              ],
-                            ),
-                          ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 22, height: 22,
+                                            decoration: const BoxDecoration(
+                                              gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text('GoWay',
+                                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                                        ],
+                                      ),
+                                      if (_currentAddressLabel.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _currentAddressLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 12, color: textSecondary),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -885,17 +944,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
               ),
             ),
           ),
-
-          if (_activeOrder != null && _routeDistKm != null)
-            Positioned(
-              left: 16, right: 16,
-              top: MediaQuery.of(context).padding.top + 74,
-              child: _LiveTrackingPanel(
-                distKm: _routeDistKm!,
-                trafficLabel: _trafficLabel(locale),
-                isDark: _isDark,
-              ),
-            ),
 
           Positioned(
             left: 16,
@@ -1036,6 +1084,79 @@ class _CircleBtn extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
       ),
       child: Icon(icon, color: textColor, size: 23),
+    );
+  }
+}
+
+class _TurnByTurnPanel extends StatelessWidget {
+  final Map<String, dynamic> step;
+  final int stepIndex;
+  final String locale;
+
+  const _TurnByTurnPanel({required this.step, required this.stepIndex, required this.locale});
+
+  static String _formatStepDistance(double meters) {
+    if (meters < 1000) return '${meters.round()}m';
+    return '${(meters / 1000).toStringAsFixed(1)}km';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final instruction = (step['instruction'] as String? ?? '').toLowerCase();
+    final distanceMeters = (step['distanceMeters'] as num?)?.toDouble() ?? 0;
+
+    final IconData icon;
+    final String textKey;
+    if (instruction.contains('left')) {
+      icon = Icons.turn_left;
+      textKey = 'turn_left_hint';
+    } else if (instruction.contains('right')) {
+      icon = Icons.turn_right;
+      textKey = 'turn_right_hint';
+    } else {
+      icon = Icons.straight;
+      textKey = 'turn_straight_hint';
+    }
+
+    final text = AppStrings.get(textKey, locale).replaceAll('{dist}', _formatStepDistance(distanceMeters));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+      ),
+      child: ClipRect(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, animation) => SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: FadeTransition(opacity: animation, child: child),
+          ),
+          child: Row(
+            key: ValueKey(stepIndex),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
