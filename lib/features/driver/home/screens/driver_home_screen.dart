@@ -112,6 +112,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   List<Point>? _savedRoutePoints;
   List<Map<String, dynamic>> _currentSteps = [];
   int _currentStepIndex = 0;
+  double _currentStepRemainingMeters = 0;
   List<MapObject> _mapObjects = [];
   bool _activeSheetExpanded = false;
 
@@ -330,9 +331,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
               Point(latitude: pos.latitude, longitude: pos.longitude),
               _savedRoutePoints!,
             );
-            final newStepIndex = _stepIndexForDistance(traveled);
-            if (mounted && newStepIndex != _currentStepIndex) {
-              setState(() => _currentStepIndex = newStepIndex);
+           final info = _stepInfoForDistance(traveled);
+            if (mounted && (info.stepIndex != _currentStepIndex || info.remainingMeters != _currentStepRemainingMeters)) {
+              setState(() {
+                _currentStepIndex = info.stepIndex;
+                _currentStepRemainingMeters = info.remainingMeters;
+              });
             }
           }
         } else {
@@ -525,15 +529,24 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     return traveled;
   }
 
-  // Bosib o'tilgan masofani, har bir "step" ning distanceMeters qiymatini
-  // yig'indilab, mos step indeksiga aylantiradi.
-  int _stepIndexForDistance(double traveledMeters) {
+// Driver bosib o'tgan masofaga qarab, HOZIRGI step ichida qolgan
+  // (keyingi burilishgacha bo'lgan) masofani, va o'sha KEYINGI step'ning
+  // ko'rsatmasini birga qaytaradi — masalan "150m dan keyin o'ngga
+  // buriling" kabi, OLDINDAN ogohlantirish uchun.
+  ({int stepIndex, double remainingMeters}) _stepInfoForDistance(double traveledMeters) {
     double cumulative = 0;
     for (int i = 0; i < _currentSteps.length; i++) {
-      cumulative += (_currentSteps[i]['distanceMeters'] as num?)?.toDouble() ?? 0;
-      if (traveledMeters <= cumulative) return i;
+      final stepDist = (_currentSteps[i]['distanceMeters'] as num?)?.toDouble() ?? 0;
+      final stepEnd = cumulative + stepDist;
+      if (traveledMeters < stepEnd) {
+        final remaining = stepEnd - traveledMeters;
+        final nextStepIdx = (i + 1 < _currentSteps.length) ? i + 1 : i;
+        return (stepIndex: nextStepIdx, remainingMeters: remaining);
+      }
+      cumulative = stepEnd;
     }
-    return _currentSteps.isEmpty ? 0 : _currentSteps.length - 1;
+    final lastIdx = _currentSteps.isEmpty ? 0 : _currentSteps.length - 1;
+    return (stepIndex: lastIdx, remainingMeters: 0);
   }
 
   List<MapObject> _buildTrackingMapObjects({
@@ -1013,6 +1026,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                 step: _currentSteps[_currentStepIndex.clamp(0, _currentSteps.length - 1)],
                 stepIndex: _currentStepIndex,
                 locale: locale,
+                overrideDistanceMeters: _currentStepRemainingMeters,
+
               ),
             ),
 
@@ -1098,8 +1113,13 @@ class _TurnByTurnPanel extends StatelessWidget {
   final int stepIndex;
   final String locale;
 
-  const _TurnByTurnPanel({required this.step, required this.stepIndex, required this.locale});
-
+  final double? overrideDistanceMeters;
+  const _TurnByTurnPanel({
+    required this.step,
+    required this.stepIndex,
+    required this.locale,
+    this.overrideDistanceMeters,
+  });
   static String _formatStepDistance(double meters) {
     if (meters < 1000) return '${meters.round()}m';
     return '${(meters / 1000).toStringAsFixed(1)}km';
@@ -1108,8 +1128,7 @@ class _TurnByTurnPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final instruction = (step['instruction'] as String? ?? '').toLowerCase();
-    final distanceMeters = (step['distanceMeters'] as num?)?.toDouble() ?? 0;
-
+    final distanceMeters = overrideDistanceMeters ?? (step['distanceMeters'] as num?)?.toDouble() ?? 0;
     final IconData icon;
     final String textKey;
     if (instruction.contains('left')) {
