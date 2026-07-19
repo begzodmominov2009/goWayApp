@@ -58,11 +58,11 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
     try {
       await widget.onSubmit(_score, combined.isEmpty ? null : combined);
       if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = AppStrings.get('rating_submit_error', locale);
+          _error = '${AppStrings.get('rating_submit_error', locale)}: $e';
         });
       }
     }
@@ -125,7 +125,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                     style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
                     textAlign: TextAlign.center),
                 const SizedBox(height: 22),
-
                 Stack(
                   alignment: Alignment.center,
                   children: [
@@ -179,7 +178,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                   ]),
                 ],
                 const SizedBox(height: 22),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(5, (i) {
@@ -204,7 +202,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                   }),
                 ),
                 const SizedBox(height: 22),
-
                 Container(
                   decoration: BoxDecoration(color: fieldBg, borderRadius: BorderRadius.circular(16)),
                   child: TextField(
@@ -221,7 +218,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -251,7 +247,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                     Text(AppStrings.get('optional_label', locale), style: TextStyle(fontSize: 12, color: textSecondary)),
                   ],
                 ),
-
                 if (_error != null) ...[
                   const SizedBox(height: 14),
                   Text(
@@ -261,7 +256,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                   ),
                 ],
                 const SizedBox(height: 22),
-
                 GestureDetector(
                   onTap: (_score == 0 || _loading) ? null : _submit,
                   child: Container(
@@ -301,7 +295,6 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
 class _AvatarInitial extends StatelessWidget {
   final String name;
   const _AvatarInitial({required this.name});
-
   @override
   Widget build(BuildContext context) {
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
