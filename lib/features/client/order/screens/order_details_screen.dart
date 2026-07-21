@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
@@ -32,18 +33,16 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   final _weightCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String? _selectedTruck;
-  List<Map<String, dynamic>> _trucks = [];
+  // Mashina turlari endi keshdan (clientTrucksCacheProvider) o'qiladi.
+  List<Map<String, dynamic>> get _trucks =>
+      ref.read(clientTrucksCacheProvider).valueOrNull ?? const [];
   bool _loading = false;
-  bool _trucksLoading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    ref.read(clientRepositoryProvider).getTrucks().then((t) {
-      if (!mounted) return;
-      setState(() { _trucksLoading = false; _trucks = t; });
-    });
+    ref.read(clientTrucksCacheProvider.notifier).refreshIfStale();
   }
 
   @override
@@ -104,6 +103,8 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
+    final trucksAsync = ref.watch(clientTrucksCacheProvider);
+    final trucksLoading = trucksAsync.isLoading && !trucksAsync.hasValue;
 
     return Scaffold(
       backgroundColor: surface,
@@ -157,7 +158,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
                     const SizedBox(height: 10),
 
-                    _trucksLoading
+                    trucksLoading
                         ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
                         : SizedBox(
                             height: 96,

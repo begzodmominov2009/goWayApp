@@ -7,6 +7,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -51,26 +52,22 @@ class _SavedAddress {
 }
 
 class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
-  List<_SavedAddress> _addresses = [];
-  bool _loading = true;
+  // Saqlangan manzillar endi keshdan (clientSavedAddressesCacheProvider)
+  // o'qiladi — SelectAddressScreen bilan bir xil keshni ulashadi.
+  List<_SavedAddress> get _addresses =>
+      (ref.read(clientSavedAddressesCacheProvider).valueOrNull ?? const [])
+          .map(_SavedAddress.fromMap)
+          .toList();
 
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(clientSavedAddressesCacheProvider.notifier).refreshIfStale();
   }
 
+  // Majburiy yangilash — qo'shish/tahrirlash/o'chirishdan keyin.
   Future<void> _load() async {
-    try {
-      final list = await ref.read(clientRepositoryProvider).getSavedAddresses();
-      if (!mounted) return;
-      setState(() {
-        _addresses = list.map(_SavedAddress.fromMap).toList();
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+    await ref.read(clientSavedAddressesCacheProvider.notifier).forceRefresh();
   }
 
   Future<void> _openAddForm() async {
@@ -125,7 +122,8 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
     try {
       await ref.read(clientRepositoryProvider).deleteSavedAddress(item.id);
       if (!mounted) return;
-      setState(() => _addresses.removeWhere((a) => a.id == item.id));
+      await _load();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppStrings.get('address_deleted_snackbar', locale)), backgroundColor: AppTheme.successColor),
       );
@@ -141,6 +139,8 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final addressesAsync = ref.watch(clientSavedAddressesCacheProvider);
+    final loading = addressesAsync.isLoading && !addressesAsync.hasValue;
 
     return Scaffold(
       backgroundColor: bg,
@@ -155,7 +155,7 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
           : _addresses.isEmpty
               ? Center(

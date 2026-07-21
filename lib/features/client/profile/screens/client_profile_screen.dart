@@ -10,6 +10,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/auth_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../core/router/app_router.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
@@ -25,8 +26,9 @@ class ClientProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
-  Map<String, dynamic>? _profile;
-  bool _loading = true;
+  // Profil endi keshdan (clientProfileCacheProvider) o'qiladi.
+  Map<String, dynamic>? get _profile =>
+      ref.read(clientProfileCacheProvider).valueOrNull;
 
   Uint8List? _avatarBytes;
   bool _avatarUploading = false;
@@ -34,19 +36,14 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // Sahifa ochilganda: kesh eskirgan (yoki avval xato bo'lgan) bo'lsa
+    // yangilaydi, aks holda keshdan ko'rsatiladi (yangi so'rov ketmaydi).
+    ref.read(clientProfileCacheProvider.notifier).refreshIfStale();
   }
 
+  // Majburiy yangilash — avatar/profil o'zgargandan keyin ishlatiladi.
   Future<void> _load() async {
-    try {
-      final profile = await ref.read(clientRepositoryProvider).getProfile();
-      setState(() {
-        _profile = profile;
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(clientProfileCacheProvider.notifier).forceRefresh();
   }
 
   String _initials() {
@@ -117,6 +114,8 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     final textSecondary =
         isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final profileAsync = ref.watch(clientProfileCacheProvider);
+    final loading = profileAsync.isLoading && !profileAsync.hasValue;
 
     // Dark mode — to'q navy gradient (avvalgidek). Light mode — och,
     // yumshoq ko'k tuslar, ko'zga yengilroq.
@@ -153,7 +152,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
           ),
         ],
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -793,6 +792,9 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     );
     if (confirmed == true) {
       await ref.read(authRepositoryProvider).logout();
+      // Keyingi (boshqa) foydalanuvchi kirganda eski keshdan ma'lumot
+      // ko'rinmasligi uchun barcha Client kesh'larini tozalaymiz.
+      invalidateClientCaches(ref);
       if (mounted) context.go(AppRoutes.onboarding);
     }
   }

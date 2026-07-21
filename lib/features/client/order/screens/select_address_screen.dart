@@ -6,6 +6,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/client_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -51,7 +52,6 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
   Timer? _fromTimer;
   Timer? _toTimer;
 
-  List<Map<String, dynamic>> _savedAddresses = [];
   final Set<String> _savedPlaceKeys = {};
 
   bool get _allFilled => _fromPlace != null && _toPlace != null;
@@ -69,14 +69,15 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_toFocus);
     });
-    _loadSavedAddresses();
+    // Tezkor tanlash ro'yxati — SavedAddressesScreen bilan bir xil keshni
+    // ulashadi (clientSavedAddressesCacheProvider), shu sabab bu yerga
+    // o'tilganda yangi so'rov ketmaydi.
+    ref.read(clientSavedAddressesCacheProvider.notifier).refreshIfStale();
   }
 
+  // Yangi manzil tezkor saqlangandan keyin (majburiy yangilash).
   Future<void> _loadSavedAddresses() async {
-    try {
-      final list = await ref.read(clientRepositoryProvider).getSavedAddresses();
-      if (mounted) setState(() => _savedAddresses = list);
-    } catch (_) {}
+    await ref.read(clientSavedAddressesCacheProvider.notifier).forceRefresh();
   }
 
   String _placeKey(Place p) => '${p.lat.toStringAsFixed(5)},${p.lng.toStringAsFixed(5)}';
@@ -251,6 +252,8 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
+    final savedAddresses =
+        ref.watch(clientSavedAddressesCacheProvider).valueOrNull ?? const <Map<String, dynamic>>[];
 
     final showFrom = _fromFocused && (_fromResults.isNotEmpty || _fromSearching);
     final showTo = _toFocused && (_toResults.isNotEmpty || _toSearching);
@@ -343,7 +346,7 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
 
             // Saqlangan manzillar — tezkor kirish uchun qisqa ro'yxat,
             // to'liq boshqaruv esa alohida SavedAddressesScreen'da
-            if (_savedAddresses.isNotEmpty)
+            if (savedAddresses.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -356,10 +359,10 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
                       height: 36,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _savedAddresses.length,
+                        itemCount: savedAddresses.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 8),
                         itemBuilder: (ctx, i) {
-                          final item = _savedAddresses[i];
+                          final item = savedAddresses[i];
                           final label = (item['name'] as String?)?.isNotEmpty == true
                               ? item['name'] as String
                               : (item['address'] as String? ?? '');

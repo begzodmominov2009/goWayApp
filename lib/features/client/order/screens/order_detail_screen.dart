@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
-import '../../../../core/network/client_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 
 class ClientOrderDetailScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -14,24 +14,16 @@ class ClientOrderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScreen> {
-  Map<String, dynamic>? _order;
-  bool _loading = true;
-  String? _error;
+  // Buyurtma tafsiloti endi orderId bo'yicha keshdan (clientOrderDetailProvider).
+  Map<String, dynamic>? get _order =>
+      ref.read(clientOrderDetailProvider(widget.orderId)).valueOrNull;
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
+  // Majburiy yangilash — pull-to-refresh va "Qayta urinish" tugmasi.
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    ref.invalidate(clientOrderDetailProvider(widget.orderId));
     try {
-      final order = await ref.read(clientRepositoryProvider).getOrder(widget.orderId);
-      setState(() { _order = order; _loading = false; });
-    } catch (_) {
-      setState(() { _loading = false; _error = 'Buyurtma topilmadi'; });
-    }
+      await ref.read(clientOrderDetailProvider(widget.orderId).future);
+    } catch (_) {}
   }
 
   String _statusText(String status) {
@@ -77,6 +69,9 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final orderAsync = ref.watch(clientOrderDetailProvider(widget.orderId));
+    final loading = orderAsync.isLoading && !orderAsync.hasValue;
+    final hasError = orderAsync.hasError;
 
     return Scaffold(
       backgroundColor: bg,
@@ -91,16 +86,16 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
-          : (_error != null || _order == null)
+          : (hasError || _order == null)
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.receipt_long_outlined, size: 48, color: textSecondary),
                       const SizedBox(height: 12),
-                      Text(_error ?? 'Buyurtma topilmadi', style: TextStyle(color: textSecondary)),
+                      Text('Buyurtma topilmadi', style: TextStyle(color: textSecondary)),
                       const SizedBox(height: 16),
                       TextButton(onPressed: _load, child: const Text('Qayta urinish')),
                     ],

@@ -6,6 +6,7 @@ import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
+import '../../../../core/providers/client_cache_providers.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
@@ -22,8 +23,10 @@ class ClientOrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
-  List<Map<String, dynamic>> _orders = [];
-  bool _loading = true;
+  // Buyurtmalar tarixi endi keshdan (clientOrdersHistoryCacheProvider) o'qiladi.
+  List<Map<String, dynamic>> get _orders =>
+      ref.read(clientOrdersHistoryCacheProvider).valueOrNull ?? const [];
+
   _FilterType _filter = _FilterType.all;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -31,7 +34,7 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(clientOrdersHistoryCacheProvider.notifier).refreshIfStale();
     _searchCtrl.addListener(() {
       setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
     });
@@ -43,13 +46,10 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
     super.dispose();
   }
 
+  // Majburiy yangilash — appbar "refresh" tugmasi, pull-to-refresh va
+  // buyurtma bekor qilingandan keyin.
   Future<void> _load() async {
-    try {
-      final orders = await ref.read(clientRepositoryProvider).getOrders();
-      setState(() { _orders = orders; _loading = false; });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(clientOrdersHistoryCacheProvider.notifier).forceRefresh();
   }
 
   // Backend statuslarini 3 ta guruhga ajratish
@@ -210,6 +210,8 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final ordersAsync = ref.watch(clientOrdersHistoryCacheProvider);
+    final loading = ordersAsync.isLoading && !ordersAsync.hasValue;
 
     final grouped = _groupedByDate(locale);
     final todayLabel = AppStrings.get('today', locale);
@@ -295,7 +297,7 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
 
           // Ro'yxat
           Expanded(
-            child: _loading
+            child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
                     ? Center(
