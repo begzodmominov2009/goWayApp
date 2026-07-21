@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
-import '../../../../core/network/driver_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 
 class WalletTransactionHistoryScreen extends ConsumerStatefulWidget {
   const WalletTransactionHistoryScreen({super.key});
@@ -13,15 +13,20 @@ class WalletTransactionHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransactionHistoryScreen> {
-  List<dynamic> _transactions = [];
-  bool _loading = true;
+  // Tranzaksiyalar hamyon keshi (driverWalletCacheProvider) bilan ULASHILADI —
+  // Hamyon sahifasidan bu yerga o'tilganda yangi so'rov ketmaydi.
+  List<dynamic> get _transactions {
+    final data = ref.read(driverWalletCacheProvider).valueOrNull;
+    return List.from((data?['transactions'] as List?) ?? const []);
+  }
+
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(driverWalletCacheProvider.notifier).refreshIfStale();
     _searchCtrl.addListener(() {
       setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
     });
@@ -33,16 +38,9 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
     super.dispose();
   }
 
+  // Pull-to-refresh — majburiy yangilash.
   Future<void> _load() async {
-    try {
-      final history = await ref.read(driverRepositoryProvider).getHistory();
-      setState(() {
-        _transactions = List.from((history['transactions'] as List?) ?? []);
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(driverWalletCacheProvider.notifier).forceRefresh();
   }
 
   List<dynamic> get _filtered {
@@ -98,6 +96,8 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final walletAsync = ref.watch(driverWalletCacheProvider);
+    final loading = walletAsync.isLoading && !walletAsync.hasValue;
     final grouped = _grouped;
 
     return Scaffold(
@@ -147,7 +147,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
             ),
           ),
           Expanded(
-            child: _loading
+            child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
                     ? Center(child: Text('Tranzaksiyalar topilmadi', style: TextStyle(color: textSecondary)))

@@ -6,7 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/network/driver_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 
 class DriverOrderDetailScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -16,28 +16,20 @@ class DriverOrderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScreen> {
-  Map<String, dynamic>? _order;
-  bool _loading = true;
-  String? _error;
+  // Buyurtma tafsiloti endi orderId bo'yicha keshdan (driverOrderDetailProvider).
+  Map<String, dynamic>? get _order =>
+      ref.read(driverOrderDetailProvider(widget.orderId)).valueOrNull;
 
   static const _steps = [
     'ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT', 'DELIVERED',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
+  // Majburiy yangilash — pull-to-refresh va "Qayta urinish" tugmasi.
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    ref.invalidate(driverOrderDetailProvider(widget.orderId));
     try {
-      final order = await ref.read(driverRepositoryProvider).getOrder(widget.orderId);
-      setState(() { _order = order; _loading = false; });
-    } catch (_) {
-      setState(() { _loading = false; _error = 'Buyurtma topilmadi'; });
-    }
+      await ref.read(driverOrderDetailProvider(widget.orderId).future);
+    } catch (_) {}
   }
 
   // COMPLETED holati DELIVERED bilan bir xil bosqichda hisoblanadi;
@@ -149,6 +141,9 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
+    final orderAsync = ref.watch(driverOrderDetailProvider(widget.orderId));
+    final loading = orderAsync.isLoading && !orderAsync.hasValue;
+    final hasError = orderAsync.hasError;
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
@@ -162,16 +157,16 @@ class _DriverOrderDetailScreenState extends ConsumerState<DriverOrderDetailScree
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
-          : (_error != null || _order == null)
+          : (hasError || _order == null)
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.receipt_long_outlined, size: 48, color: textSecondary),
                       const SizedBox(height: 12),
-                      Text(_error ?? 'Buyurtma topilmadi', style: TextStyle(color: textSecondary)),
+                      Text('Buyurtma topilmadi', style: TextStyle(color: textSecondary)),
                       const SizedBox(height: 16),
                       TextButton(onPressed: _load, child: const Text('Qayta urinish')),
                     ],

@@ -11,6 +11,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/auth_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 import '../../../../core/router/app_router.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
@@ -25,9 +26,14 @@ class DriverProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
-  Map<String, dynamic>? _profile;
-  List<Map<String, dynamic>> _trucks = [];
-  bool _loading = true;
+  // Profil + mashina turlari endi keshdan (driverProfileCacheProvider) o'qiladi.
+  // Quyidagi getter'lar orqali eski kod ('_profile', '_trucks') o'zgarishsiz
+  // ishlayveradi.
+  Map<String, dynamic>? get _profile =>
+      ref.read(driverProfileCacheProvider).valueOrNull?['profile'] as Map<String, dynamic>?;
+  List<Map<String, dynamic>> get _trucks =>
+      (((ref.read(driverProfileCacheProvider).valueOrNull?['trucks']) as List?) ?? const [])
+          .cast<Map<String, dynamic>>();
 
   Uint8List? _avatarBytes;
   bool _avatarUploading = false;
@@ -35,7 +41,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // Sahifa ochilganda: kesh eskirgan (yoki avval xato bo'lgan) bo'lsa
+    // yangilaydi, aks holda keshdan ko'rsatiladi (yangi so'rov ketmaydi).
+    ref.read(driverProfileCacheProvider.notifier).refreshIfStale();
   }
 
   // Profil rasmini (avatar) tanlash — ixtiyoriy, tanlanmasa hech narsa
@@ -85,20 +93,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     );
   }
 
+  // Majburiy yangilash — avatar/profil o'zgargandan keyin va boshqa joylarda
+  // ishlatiladi. Keshni yangilaydi; watch qilingan build avtomatik yangilanadi.
   Future<void> _load() async {
-    try {
-      final results = await Future.wait([
-        ref.read(driverRepositoryProvider).getProfile(),
-        ref.read(driverRepositoryProvider).getTrucks(),
-      ]);
-      setState(() {
-        _profile = results[0] as Map<String, dynamic>;
-        _trucks = results[1] as List<Map<String, dynamic>>;
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(driverProfileCacheProvider.notifier).forceRefresh();
   }
 
   String _initials() {
@@ -114,6 +112,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
     final themeMode = ref.watch(themeModeProvider);
+    // Profilni kuzatamiz — ma'lumot kelganda/yangilanganda ekran qayta chiziladi.
+    final profileAsync = ref.watch(driverProfileCacheProvider);
+    final loading = profileAsync.isLoading && !profileAsync.hasValue;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
@@ -152,7 +153,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
           ),
         ],
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -622,6 +623,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
 
   Future<void> _logout() async {
     await ref.read(authRepositoryProvider).logout();
+    // Keyingi (boshqa) foydalanuvchi kirganda eski keshdan ma'lumot
+    // ko'rinmasligi uchun barcha Driver kesh'larini tozalaymiz.
+    invalidateDriverCaches(ref);
     if (mounted) context.go(AppRoutes.onboarding);
   }
 }

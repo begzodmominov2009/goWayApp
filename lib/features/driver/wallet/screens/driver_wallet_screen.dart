@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/driver_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 import '../../../../core/router/app_router.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
@@ -22,27 +23,28 @@ class DriverWalletScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
-  Map<String, dynamic>? _stats;
-  List<dynamic> _transactions = [];
-  bool _loading = true;
+  // Hamyon ma'lumoti endi keshdan (driverWalletCacheProvider) o'qiladi.
+  Map<String, dynamic>? get _stats {
+    final data = ref.read(driverWalletCacheProvider).valueOrNull;
+    if (data == null) return null;
+    return Map<String, dynamic>.from((data['stats'] as Map?) ?? const {});
+  }
+
+  List<dynamic> get _transactions {
+    final data = ref.read(driverWalletCacheProvider).valueOrNull;
+    return List.from((data?['transactions'] as List?) ?? const []);
+  }
 
   @override
   void initState() {
     super.initState();
-    _load();
+    // Ochilganda: kesh eskirgan bo'lsagina yangilaydi, aks holda keshdan.
+    ref.read(driverWalletCacheProvider.notifier).refreshIfStale();
   }
 
+  // Majburiy yangilash — pull-to-refresh va topup so'rovidan keyin.
   Future<void> _load() async {
-    try {
-      final history = await ref.read(driverRepositoryProvider).getHistory();
-      setState(() {
-        _stats = Map<String, dynamic>.from((history['stats'] as Map?) ?? {});
-        _transactions = List.from((history['transactions'] as List?) ?? []);
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(driverWalletCacheProvider.notifier).forceRefresh();
   }
 
   void _openTopup() {
@@ -96,6 +98,8 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final walletAsync = ref.watch(driverWalletCacheProvider);
+    final loading = walletAsync.isLoading && !walletAsync.hasValue;
     final grouped = _recentGrouped;
 
     return Scaffold(
@@ -111,7 +115,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
-      body: _loading
+      body: loading
           ? const Center(child: AppLoadingIndicator())
           : RefreshIndicator(
               onRefresh: _load,

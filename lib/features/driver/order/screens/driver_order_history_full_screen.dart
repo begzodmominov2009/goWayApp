@@ -5,7 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/network/driver_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 
 enum _HistoryFilter { all, delivered, cancelled }
 
@@ -22,8 +22,16 @@ class DriverOrderHistoryFullScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistoryFullScreen> {
-  List<Map<String, dynamic>> _orders = [];
-  bool _loading = true;
+  // Buyurtmalar tarixi endi keshdan (driverHistoryCacheProvider) o'qiladi —
+  // DriverHistoryScreen bilan bir xil kesh ulashiladi, shu sabab bu yerga
+  // o'tilganda yangi so'rov ketmaydi.
+  List<Map<String, dynamic>> get _orders {
+    final data = ref.read(driverHistoryCacheProvider).valueOrNull;
+    return ((data?['orders'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
   _HistoryFilter _filter = _HistoryFilter.all;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -31,7 +39,7 @@ class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistor
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(driverHistoryCacheProvider.notifier).refreshIfStale();
     _searchCtrl.addListener(() {
       setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
     });
@@ -43,16 +51,9 @@ class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistor
     super.dispose();
   }
 
+  // Majburiy yangilash — appbar "refresh" tugmasi va pull-to-refresh.
   Future<void> _load() async {
-    try {
-      final history = await ref.read(driverRepositoryProvider).getHistory();
-      final list = ((history['orders'] as List?) ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      setState(() { _orders = list; _loading = false; });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(driverHistoryCacheProvider.notifier).forceRefresh();
   }
 
   bool _matchesFilter(String status) {
@@ -205,6 +206,8 @@ class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistor
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final historyAsync = ref.watch(driverHistoryCacheProvider);
+    final loading = historyAsync.isLoading && !historyAsync.hasValue;
 
     final grouped = _groupedByDate(locale);
 
@@ -290,7 +293,7 @@ class _DriverOrderHistoryFullScreenState extends ConsumerState<DriverOrderHistor
 
           // Ro'yxat — barcha buyurtmalar, sana bo'yicha guruhlangan
           Expanded(
-            child: _loading
+            child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : grouped.isEmpty
                     ? Center(

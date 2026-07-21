@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
-import '../../../../core/network/driver_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 
 enum _TopupFilter { all, pending, approved, rejected }
 
@@ -20,23 +20,20 @@ class TopupRequestHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryScreen> {
-  List<Map<String, dynamic>> _requests = [];
-  bool _loading = true;
+  // Balans to'ldirish so'rovlari endi keshdan (driverTopupHistoryCacheProvider).
+  List<Map<String, dynamic>> get _requests =>
+      ref.read(driverTopupHistoryCacheProvider).valueOrNull ?? const [];
   _TopupFilter _filter = _TopupFilter.all;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(driverTopupHistoryCacheProvider.notifier).refreshIfStale();
   }
 
+  // Pull-to-refresh — majburiy yangilash.
   Future<void> _load() async {
-    try {
-      final list = await ref.read(driverRepositoryProvider).getTopupHistory();
-      setState(() { _requests = list; _loading = false; });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    await ref.read(driverTopupHistoryCacheProvider.notifier).forceRefresh();
   }
 
   bool _matchesFilter(String status) {
@@ -160,6 +157,8 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final topupAsync = ref.watch(driverTopupHistoryCacheProvider);
+    final loading = topupAsync.isLoading && !topupAsync.hasValue;
 
     return Scaffold(
       backgroundColor: bg,
@@ -191,7 +190,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
             ),
           ),
           Expanded(
-            child: _loading
+            child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
                     ? Center(child: Text('So\'rovlar topilmadi', style: TextStyle(color: textSecondary)))
