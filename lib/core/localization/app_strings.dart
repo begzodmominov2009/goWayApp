@@ -332,6 +332,16 @@ class AppStrings {
       'set_new_line_title': 'Yangi liniya belgilash',
       'order_accepted_success': 'Buyurtma muvaffaqiyatli qabul qilindi',
       'scheduled_time_label': 'Vaqti',
+      // ==== Buyurtma turi (Hozir/Bugun/Ertaga) ====
+      'order_type_sheet_title': 'Buyurtma turini tanlang',
+      'order_type_now': 'Hozir',
+      'order_type_now_desc': 'Darhol haydovchi qidiriladi',
+      'order_type_today': 'Bugun',
+      'order_type_tomorrow': 'Ertaga',
+      'order_type_select_time': 'Vaqtni tanlash',
+      'order_type_min_time_error': 'Kamida 1 soat keyingi vaqtni tanlang',
+      'order_type_pick_time_today': 'Bugun soat nechida?',
+      'order_type_pick_time_tomorrow': 'Ertaga soat nechida?',
     },
     'ru': {
       'select_language': 'Выберите язык',
@@ -665,6 +675,16 @@ class AppStrings {
       'set_new_line_title': 'Указать новую линию',
       'order_accepted_success': 'Заказ успешно принят',
       'scheduled_time_label': 'Время',
+      // ==== Тип заказа (Сейчас/Сегодня/Завтра) ====
+      'order_type_sheet_title': 'Выберите тип заказа',
+      'order_type_now': 'Сейчас',
+      'order_type_now_desc': 'Водитель будет найден немедленно',
+      'order_type_today': 'Сегодня',
+      'order_type_tomorrow': 'Завтра',
+      'order_type_select_time': 'Выбрать время',
+      'order_type_min_time_error': 'Выберите время минимум через 1 час',
+      'order_type_pick_time_today': 'Во сколько сегодня?',
+      'order_type_pick_time_tomorrow': 'Во сколько завтра?',
     },
     'en': {
       'select_language': 'Choose language',
@@ -998,6 +1018,16 @@ class AppStrings {
       'set_new_line_title': 'Set a new line',
       'order_accepted_success': 'Order accepted successfully',
       'scheduled_time_label': 'Time',
+      // ==== Order type (Now/Today/Tomorrow) ====
+      'order_type_sheet_title': 'Select order type',
+      'order_type_now': 'Now',
+      'order_type_now_desc': 'A driver will be found immediately',
+      'order_type_today': 'Today',
+      'order_type_tomorrow': 'Tomorrow',
+      'order_type_select_time': 'Select time',
+      'order_type_min_time_error': 'Please select a time at least 1 hour from now',
+      'order_type_pick_time_today': 'What time today?',
+      'order_type_pick_time_tomorrow': 'What time tomorrow?',
     },
   };
 

@@ -18,11 +18,15 @@ import '../../../../shared/widgets/place.dart';
 class OrderDetailsScreen extends ConsumerStatefulWidget {
   final Place fromPlace;
   final Place toPlace;
+  final bool isScheduled;
+  final DateTime? scheduledFor;
 
   const OrderDetailsScreen({
     super.key,
     required this.fromPlace,
     required this.toPlace,
+    this.isScheduled = false,
+    this.scheduledFor,
   });
 
   @override
@@ -73,11 +77,57 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
         truckType: _selectedTruck!,
         weight: double.parse(_weightCtrl.text),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+        isScheduled: widget.isScheduled,
+        scheduledFor: widget.scheduledFor,
       );
       if (mounted) Navigator.pop(context, created);
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = _errorMessage(e, locale); });
+      if (!mounted) return;
+      // Yo'nalish (shahar juftligi) hozircha faol bo'lmasa backend 400
+      // bilan javob beradi va o'z xabarida aniq qaysi yo'nalish ekanini
+      // aytadi — shu aniq matn to'g'ridan-to'g'ri modalda ko'rsatiladi.
+      if (e is OrderCreationException && e.reasonKey == 'bad_request') {
+        setState(() => _loading = false);
+        _showInactiveRouteDialog(e.serverMessage);
+        return;
+      }
+      setState(() { _loading = false; _error = _errorMessage(e, locale); });
     }
+  }
+
+  Future<void> _showInactiveRouteDialog(String? serverMessage) async {
+    final locale = ref.read(localeProvider).languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          AppStrings.get('route_inactive_title', locale),
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+            fontWeight: FontWeight.w700, fontSize: 16,
+          ),
+        ),
+        content: Text(
+          serverMessage ?? AppStrings.get('generic_error', locale),
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+            fontSize: 13,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              AppStrings.get('close', locale),
+              style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _errorMessage(Object e, String locale) {

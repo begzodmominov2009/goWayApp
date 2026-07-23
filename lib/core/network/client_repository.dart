@@ -14,7 +14,11 @@ final clientRepositoryProvider = Provider<ClientRepository>((ref) {
 class OrderCreationException implements Exception {
   final String reasonKey;
   final String debugMessage;
-  OrderCreationException(this.reasonKey, this.debugMessage);
+  // Backend 'bad_request' (masalan yo'nalish hozircha faol emas) qaytarganda
+  // javob tanasidagi aniq 'message' matni — UI shu matnni to'g'ridan-to'g'ri
+  // ko'rsatishi mumkin (masalan "Toshkent yo'nalishingiz hali faol emas").
+  final String? serverMessage;
+  OrderCreationException(this.reasonKey, this.debugMessage, {this.serverMessage});
 
   @override
   String toString() => 'OrderCreationException($reasonKey): $debugMessage';
@@ -49,6 +53,8 @@ class ClientRepository {
     String? cargoType,
     String? note,
     String priority = 'STANDARD',
+    bool isScheduled = false,
+    DateTime? scheduledFor,
   }) async {
     debugPrint('[ClientRepository] Order so\'rovi yuborilmoqda... (truckType=$truckType, weight=$weight)');
     try {
@@ -68,6 +74,8 @@ class ClientRepository {
           if (cargoType != null && cargoType.isNotEmpty) 'cargoType': cargoType,
           if (note != null && note.isNotEmpty) 'note': note,
           'priority': priority,
+          'isScheduled': isScheduled,
+          if (scheduledFor != null) 'scheduledFor': scheduledFor.toIso8601String(),
         },
         options: Options(
           sendTimeout: const Duration(seconds: 15),
@@ -95,7 +103,9 @@ class ClientRepository {
         if (status != null && status >= 500) {
           return OrderCreationException('server_error', 'HTTP $status');
         }
-        return OrderCreationException('bad_request', 'HTTP $status');
+        final data = e.response?.data;
+        final serverMsg = (data is Map && data['message'] is String) ? data['message'] as String : null;
+        return OrderCreationException('bad_request', 'HTTP $status', serverMessage: serverMsg);
       default:
         return OrderCreationException('unknown', e.message ?? e.toString());
     }

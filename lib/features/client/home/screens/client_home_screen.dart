@@ -17,6 +17,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
 import '../../../../shared/widgets/driver_avatar.dart';
+import '../../../../shared/widgets/order_type_sheet.dart';
 import '../../../../core/providers/active_order_provider.dart';
 import '../widgets/client_menu_sheet.dart';
 
@@ -434,6 +435,41 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     final created = await context.push<Map<String, dynamic>>(
       AppRoutes.clientOrderDetails,
       extra: {'fromPlace': _fromPlace, 'toPlace': _toPlace},
+    );
+    if (created != null && mounted) _showSearching(created);
+  }
+
+  // Yangi buyurtma oqimi: avval "Hozir/Bugun/Ertaga" modalini so'raydi,
+  // so'ng (agar hali tanlanmagan bo'lsa) manzil tanlash sahifasini ochadi,
+  // va nihoyat OrderDetailsScreenga o'tadi. "Manzil kiriting" va "Buyurtma
+  // berish" tugmalari ikkalasi ham shu bitta metodga ulanadi — har bir
+  // await natijasi tekshirilib, null bo'lsa oqim shu yerda to'xtaydi va
+  // hech qanday keyingi sahifa ochilmaydi.
+  Future<void> _startOrderFlow() async {
+    final typeResult = await showOrderTypeSheet(context);
+    if (typeResult == null || !mounted) return;
+    final isScheduled = typeResult['isScheduled'] as bool? ?? false;
+    final scheduledFor = typeResult['scheduledFor'] as DateTime?;
+
+    // Manzil hali tanlanmagan bo'lsa — tanlash sahifasini och
+    if (_fromPlace == null || _toPlace == null) {
+      final result = await context.push<Map<String, Place>>(
+        AppRoutes.clientSelectAddress,
+        extra: {'initialFrom': _fromPlace, 'fromLat': _fromLat, 'fromLng': _fromLng},
+      );
+      if (result == null || !mounted) return;
+      setState(() { _fromPlace = result['from']; _toPlace = result['to']; });
+      _drawRoute();
+    }
+
+    if (_fromPlace == null || _toPlace == null) return;
+
+    final created = await context.push<Map<String, dynamic>>(
+      AppRoutes.clientOrderDetails,
+      extra: {
+        'fromPlace': _fromPlace, 'toPlace': _toPlace,
+        'isScheduled': isScheduled, 'scheduledFor': scheduledFor,
+      },
     );
     if (created != null && mounted) _showSearching(created);
   }
@@ -916,7 +952,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                     ),
                   ] else if (_fromPlace != null && _toPlace != null) ...[
                     GestureDetector(
-                      onTap: _openSelectAddressPage,
+                      onTap: _startOrderFlow,
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -975,12 +1011,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                         const SizedBox(width: 10),
                         Expanded(
                           flex: 2,
-                          child: _GradBtn(label: AppStrings.get('place_order', locale), onTap: _openOrderDetailsPage),
+                          child: _GradBtn(label: AppStrings.get('place_order', locale), onTap: _startOrderFlow),
                         ),
                       ],
                     ),
                   ] else
-                    _GradBtn(label: AppStrings.get('enter_address', locale), onTap: _openSelectAddressPage),
+                    _GradBtn(label: AppStrings.get('enter_address', locale), onTap: _startOrderFlow),
                   const SizedBox(height: 4),
                 ],
               ),
