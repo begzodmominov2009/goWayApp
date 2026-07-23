@@ -8,6 +8,19 @@ final driverRepositoryProvider = Provider<DriverRepository>((ref) {
   return DriverRepository(dio);
 });
 
+/// Liniya (fromRegion/toRegion) belgilashda xato yuz berganda aniq sabab
+/// bilan tashlanadi — client_repository.dartdagi OrderCreationException
+/// bilan bir xil naqsh. `reasonKey` — AppStrings kalitiga mos keladigan
+/// tur (masalan 'no_connection', 'timeout', 'server_error', 'bad_request').
+class DriverLineException implements Exception {
+  final String reasonKey;
+  final String debugMessage;
+  DriverLineException(this.reasonKey, this.debugMessage);
+
+  @override
+  String toString() => 'DriverLineException($reasonKey): $debugMessage';
+}
+
 class DriverRepository {
   final Dio _dio;
   DriverRepository(this._dio);
@@ -222,5 +235,72 @@ class DriverRepository {
       if (distanceKm != null) 'distanceKm': distanceKm,
       if (durationMin != null) 'durationMin': durationMin,
     });
+  }
+
+  // ==== Haydovchi liniyasi (xizmat ko'rsatadigan yo'nalish) ====
+
+  Future<Map<String, dynamic>?> getDriverLine() async {
+    final profile = await getProfile();
+    if (profile['lineActive'] != true) return null;
+    return {
+      'fromRegionId': profile['lineFromRegionId'] as String?,
+      'fromDistrictId': profile['lineFromDistrictId'] as String?,
+      'toRegionId': profile['lineToRegionId'] as String?,
+      'toDistrictId': profile['lineToDistrictId'] as String?,
+      'expiresAt': profile['lineExpiresAt'],
+    };
+  }
+
+  Future<void> setDriverLine({
+    String? fromRegionId, String? fromDistrictId,
+    String? toRegionId, String? toDistrictId,
+    int durationHours = 12,
+  }) async {
+    try {
+      await _dio.post('/driver/line', data: {
+        if (fromRegionId != null) 'fromRegionId': fromRegionId,
+        if (fromDistrictId != null) 'fromDistrictId': fromDistrictId,
+        if (toRegionId != null) 'toRegionId': toRegionId,
+        if (toDistrictId != null) 'toDistrictId': toDistrictId,
+        'durationHours': durationHours,
+      });
+    } on DioException catch (e) {
+      throw _mapLineError(e);
+    }
+  }
+
+  Future<void> clearDriverLine() async {
+    await _dio.post('/driver/line', data: {});
+  }
+
+  DriverLineException _mapLineError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return DriverLineException('timeout', e.message ?? 'Timeout');
+      case DioExceptionType.connectionError:
+        return DriverLineException('no_connection', e.message ?? 'Connection error');
+      case DioExceptionType.badResponse:
+        final status = e.response?.statusCode;
+        if (status != null && status >= 500) {
+          return DriverLineException('server_error', 'HTTP $status');
+        }
+        return DriverLineException('bad_request', 'HTTP $status');
+      default:
+        return DriverLineException('unknown', e.message ?? e.toString());
+    }
+  }
+
+  // ==== Rejalashtirilgan buyurtmalar ====
+
+  Future<List<Map<String, dynamic>>> getScheduledOrders(String day) async {
+    final res = await _dio.get('/driver/scheduled-orders', queryParameters: {'day': day});
+    final list = res.data['data'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<void> acceptScheduledOrder(String orderId) async {
+    await _dio.post('/driver/scheduled-orders/$orderId/accept');
   }
 }

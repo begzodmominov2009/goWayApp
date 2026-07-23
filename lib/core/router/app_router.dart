@@ -29,6 +29,8 @@ import '../../features/driver/wallet/screens/wallet_transaction_history_screen.d
 import '../../features/driver/wallet/screens/topup_request_history_screen.dart';
 import '../../features/driver/profile/screens/driver_profile_screen.dart';
 import '../../features/driver/settings/screens/driver_settings_screen.dart';
+import '../../features/driver/line/screens/driver_line_screen.dart';
+import '../../features/driver/scheduled/screens/driver_scheduled_orders_screen.dart';
 import '../../shared/screens/chat_screen.dart';
 import '../../shared/screens/terms_screen.dart';
 import '../../shared/screens/notifications_screen.dart';
@@ -65,6 +67,8 @@ class AppRoutes {
   static const topupRequestHistory = '/driver/wallet/topup-history';
   static const driverProfile = '/driver/profile';
   static const driverSettings = '/driver/settings';
+  static const driverLine = '/driver/line';
+  static const driverScheduledOrders = '/driver/scheduled-orders';
 
   static const chat = '/chat/:orderId';
   static const terms = '/terms';
@@ -293,6 +297,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.driverSettings,
         pageBuilder: (context, state) => _slidePage(const DriverSettingsScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.driverLine,
+        pageBuilder: (context, state) => _slidePage(const DriverLineScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.driverScheduledOrders,
+        pageBuilder: (context, state) => _slidePage(const DriverScheduledOrdersScreen(), state),
       ),
 
       // Umumiy — Chat, Terms, Notifications

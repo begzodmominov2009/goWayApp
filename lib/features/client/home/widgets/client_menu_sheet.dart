@@ -2,18 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/auth_repository.dart';
 import '../../../../core/network/notification_repository.dart';
 import '../../../../core/providers/active_order_provider.dart';
 import '../../../../core/router/app_router.dart';
-
-final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
-  duration: const Duration(milliseconds: 350),
-  reverseDuration: const Duration(milliseconds: 320),
-);
 
 class ClientMenuSheet extends ConsumerStatefulWidget {
   const ClientMenuSheet({super.key});
@@ -42,7 +36,6 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
-    final themeMode = ref.watch(themeModeProvider);
     final activeOrder = ref.watch(activeOrderProvider);
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
@@ -132,109 +125,8 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
               context.push(AppRoutes.faq);
             },
           ),
-          Divider(height: 8, color: border, indent: 20, endIndent: 20),
-          _MenuTile(
-            icon: Icons.language_outlined,
-            label: AppStrings.get('language', locale),
-            value: AppStrings.get('native_language_name', locale),
-            isDark: isDark,
-            onTap: () => _showLanguagePicker(context, ref),
-          ),
-          _MenuTile(
-            icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-            label: AppStrings.get('theme', locale),
-            value: themeMode == ThemeMode.dark
-                ? AppStrings.get('theme_dark', locale)
-                : themeMode == ThemeMode.light
-                    ? AppStrings.get('theme_light', locale)
-                    : AppStrings.get('theme_auto', locale),
-            isDark: isDark,
-            onTap: () => _showThemePicker(context, ref),
-          ),
         ],
       ),
-    );
-  }
-
-  void _showLanguagePicker(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final locale = ref.read(localeProvider).languageCode;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) {
-        final current = ref.read(localeProvider).languageCode;
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(AppStrings.get('select_language', locale), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary)),
-              const SizedBox(height: 16),
-              ...[('uz', 'O\'zbek', '🇺🇿'), ('ru', 'Русский', '🇷🇺'), ('en', 'English', '🇬🇧')].map((item) =>
-                ListTile(
-                  leading: Text(item.$3, style: const TextStyle(fontSize: 22)),
-                  title: Text(item.$2, style: TextStyle(
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                    fontWeight: current == item.$1 ? FontWeight.w700 : FontWeight.w400,
-                  )),
-                  trailing: current == item.$1
-                      ? const Icon(Icons.check, color: AppTheme.primaryColor, size: 18) : null,
-                  onTap: () {
-                    ref.read(localeProvider.notifier).setLocale(item.$1);
-                    Navigator.pop(ctx);
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showThemePicker(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final locale = ref.read(localeProvider).languageCode;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) {
-        final current = ref.read(themeModeProvider);
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(AppStrings.get('select_theme', locale), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary)),
-              const SizedBox(height: 16),
-              ...[
-                (ThemeMode.system, AppStrings.get('theme_auto', locale), Icons.brightness_auto_outlined),
-                (ThemeMode.light, AppStrings.get('theme_light', locale), Icons.light_mode_outlined),
-                (ThemeMode.dark, AppStrings.get('theme_dark', locale), Icons.dark_mode_outlined),
-              ].map((item) => ListTile(
-                leading: Icon(item.$3, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
-                title: Text(item.$2, style: TextStyle(
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                  fontWeight: current == item.$1 ? FontWeight.w700 : FontWeight.w400,
-                )),
-                trailing: current == item.$1
-                    ? const Icon(Icons.check, color: AppTheme.primaryColor, size: 18) : null,
-                onTap: () {
-                  ref.read(themeModeProvider.notifier).setTheme(item.$1);
-                  Navigator.pop(ctx);
-                },
-              )),
-            ],
-          ),
-        );
-      },
     );
   }
 }
