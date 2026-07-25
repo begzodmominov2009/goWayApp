@@ -122,7 +122,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   List<Map<String, dynamic>> _currentSteps = [];
   int _currentStepIndex = 0;
   double _currentStepRemainingMeters = 0;
-  List<MapObject> _mapObjects = [];
+  final ValueNotifier<List<MapObject>> _mapObjectsNotifier = ValueNotifier([]);
   bool _activeSheetExpanded = false;
 
   final FlutterTts _tts = FlutterTts();
@@ -215,6 +215,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _offerTimer?.cancel();
     _trackingTimer?.cancel();
     _notifCountTimer?.cancel();
+    _mapObjectsNotifier.dispose();
     super.dispose();
   }
 
@@ -251,17 +252,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   void _updateMyLocationPin() {
     if (_myLocationIcon == null || _currentPosition == null || _activeOrder != null) return;
-    setState(() {
-      _mapObjects = [
-        PlacemarkMapObject(
-          mapId: const MapObjectId('my_location'),
-          point: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
-          icon: PlacemarkIcon.single(PlacemarkIconStyle(
-            image: _myLocationIcon!, scale: 0.18, anchor: const Offset(0.5, 0.5),
-          )),
-        ),
-      ];
-    });
+    _mapObjectsNotifier.value = [
+      PlacemarkMapObject(
+        mapId: const MapObjectId('my_location'),
+        point: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+        icon: PlacemarkIcon.single(PlacemarkIconStyle(
+          image: _myLocationIcon!, scale: 0.18, anchor: const Offset(0.5, 0.5),
+        )),
+      ),
+    ];
   }
 
   Future<void> _initLocation() async {
@@ -773,27 +772,25 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _initialDistanceKm ??= route?.distanceKm;
         _currentSteps = route?.steps ?? [];
         _currentStepIndex = 0;
-        _mapObjects = _buildTrackingMapObjects(
-          points: points,
-          driverLat: driverLat,
-          driverLng: driverLng,
-          targetLat: targetLat,
-          targetLng: targetLng,
-          isPickup: isPickup,
-        );
       });
+      _mapObjectsNotifier.value = _buildTrackingMapObjects(
+        points: points,
+        driverLat: driverLat,
+        driverLng: driverLng,
+        targetLat: targetLat,
+        targetLng: targetLng,
+        isPickup: isPickup,
+      );
     } else {
       points = _savedRoutePoints!;
-      setState(() {
-        _mapObjects = _buildTrackingMapObjects(
-          points: points,
-          driverLat: driverLat,
-          driverLng: driverLng,
-          targetLat: targetLat,
-          targetLng: targetLng,
-          isPickup: isPickup,
-        );
-      });
+      _mapObjectsNotifier.value = _buildTrackingMapObjects(
+        points: points,
+        driverLat: driverLat,
+        driverLng: driverLng,
+        targetLat: targetLat,
+        targetLng: targetLng,
+        isPickup: isPickup,
+      );
     }
 
     if (fitToBounds) {
@@ -877,12 +874,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         _trackingTimer?.cancel();
         setState(() {
           _activeOrder = null;
-          _mapObjects = [];
           _routeDistKm = null;
           _routeTimeMin = null;
           _initialDistanceKm = null;
           _activeSheetExpanded = false;
         });
+        _mapObjectsNotifier.value = [];
         _restartLocationTimer();
         _updateMyLocationPin();
         if (_isOnline) _startOfferPolling();
@@ -909,13 +906,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _trackingTimer?.cancel();
     setState(() {
       _activeOrder = null;
-      _mapObjects = [];
       _routeDistKm = null;
       _routeTimeMin = null;
       _initialDistanceKm = null;
       _savedRoutePoints = null;
       _activeSheetExpanded = false;
     });
+    _mapObjectsNotifier.value = [];
     _restartLocationTimer();
     _updateMyLocationPin();
     if (_isOnline) _startOfferPolling();
@@ -955,30 +952,33 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       body: Stack(
         children: [
           Positioned.fill(
-            child: YandexMap(
-              nightModeEnabled: _isDark,
-              onMapCreated: (controller) {
-                _mapController = controller;
-                if (_currentPosition != null) {
-                  controller.moveCamera(
-                    CameraUpdate.newCameraPosition(
-                      CameraPosition(
-                        target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
-                        zoom: 14,
+            child: ValueListenableBuilder<List<MapObject>>(
+              valueListenable: _mapObjectsNotifier,
+              builder: (context, mapObjects, _) => YandexMap(
+                nightModeEnabled: _isDark,
+                onMapCreated: (controller) {
+                  _mapController = controller;
+                  if (_currentPosition != null) {
+                    controller.moveCamera(
+                      CameraUpdate.newCameraPosition(
+                        CameraPosition(
+                          target: Point(latitude: _currentPosition!.latitude, longitude: _currentPosition!.longitude),
+                          zoom: 14,
+                        ),
                       ),
-                    ),
-                  );
-                }
-              },
-              onCameraPositionChanged: (pos, reason, finished) {
-                if (reason == CameraUpdateReason.gestures) {
-                  _lastUserGestureAt = DateTime.now();
-                }
-                if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
-                  setState(() => _currentZoom = pos.zoom);
-                }
-              },
-              mapObjects: _mapObjects,
+                    );
+                  }
+                },
+                onCameraPositionChanged: (pos, reason, finished) {
+                  if (reason == CameraUpdateReason.gestures) {
+                    _lastUserGestureAt = DateTime.now();
+                  }
+                  if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
+                    setState(() => _currentZoom = pos.zoom);
+                  }
+                },
+                mapObjects: mapObjects,
+              ),
             ),
           ),
 
