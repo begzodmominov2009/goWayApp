@@ -9,6 +9,8 @@ import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/providers/driver_cache_providers.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/localization/locale_provider.dart';
+import '../../../../core/localization/app_strings.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
@@ -63,6 +65,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
   }
 
   Map<String, List<dynamic>> get _recentGrouped {
+    final locale = ref.read(localeProvider).languageCode;
     final now = DateTime.now();
     final weekAgo = now.subtract(const Duration(days: 7));
     final today = DateTime(now.year, now.month, now.day);
@@ -78,12 +81,12 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
       final dateOnly = DateTime(date.year, date.month, date.day);
       String label;
       if (dateOnly == today) {
-        label = 'Bugun';
+        label = AppStrings.get('today', locale);
       } else if (dateOnly == yesterday) {
-        label = 'Kecha';
+        label = AppStrings.get('yesterday', locale);
       } else {
-        const months = ['yan', 'fev', 'mar', 'apr', 'may', 'iyun', 'iyul', 'avg', 'sen', 'okt', 'noy', 'dek'];
-        label = '${date.day} ${months[date.month - 1]}';
+        final monthKey = 'month_short_${date.month.toString().padLeft(2, '0')}';
+        label = '${date.day} ${AppStrings.get(monthKey, locale)}';
       }
       grouped.putIfAbsent(label, () => []).add(tx);
     }
@@ -93,6 +96,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
@@ -111,7 +115,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
           icon: Icon(Icons.arrow_back_ios, color: textPrimary, size: 20),
           onPressed: () => context.pop(),
         ),
-        title: Text('Hamyon',
+        title: Text(AppStrings.get('wallet', locale),
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
@@ -136,8 +140,8 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Asosiy balans',
-                            style: TextStyle(fontSize: 12, color: Colors.white70)),
+                        Text(AppStrings.get('main_balance', locale),
+                            style: const TextStyle(fontSize: 12, color: Colors.white70)),
                         const SizedBox(height: 4),
                         Text(
                           '${_stats?['currentBalance'] ?? 0} so\'m',
@@ -147,9 +151,9 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            _WalletStat(label: 'Jami reyslar', value: '${_stats?['totalOrders'] ?? 0}'),
+                            _WalletStat(label: AppStrings.get('total_trips', locale), value: '${_stats?['totalOrders'] ?? 0}'),
                             const SizedBox(width: 24),
-                            _WalletStat(label: 'Jami daromad', value: '${_stats?['totalEarned'] ?? 0}'),
+                            _WalletStat(label: AppStrings.get('total_earned', locale), value: '${_stats?['totalEarned'] ?? 0}'),
                           ],
                         ),
                       ],
@@ -171,13 +175,13 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                         ),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add, color: Colors.white, size: 18),
-                          SizedBox(width: 8),
-                          Text('Balans to\'ldirish',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                          const Icon(Icons.add, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text(AppStrings.get('topup_balance', locale),
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
                         ],
                       ),
                     ),
@@ -199,7 +203,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                           const Icon(Icons.history, size: 18, color: AppTheme.primaryColor),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text('To\'ldirish so\'rovlarim tarixi',
+                            child: Text(AppStrings.get('topup_requests_history', locale),
                                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
                           ),
                           Icon(Icons.chevron_right, size: 18, color: textSecondary),
@@ -213,13 +217,13 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('So\'nggi tranzaksiyalar',
+                      Text(AppStrings.get('recent_transactions', locale),
                           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
                       if (_transactions.isNotEmpty)
                         GestureDetector(
                           onTap: () => context.push(AppRoutes.walletTransactionHistory),
-                          child: const Text('Barchasini ko\'rish',
-                              style: TextStyle(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+                          child: Text(AppStrings.get('view_all', locale),
+                              style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
                         ),
                     ],
                   ),
@@ -229,7 +233,7 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
-                        child: Text('Tranzaksiyalar yo\'q',
+                        child: Text(AppStrings.get('no_transactions', locale),
                             style: TextStyle(color: textSecondary)),
                       ),
                     )
@@ -395,21 +399,23 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
 
   void _copyCard() {
     if (_card == null) return;
+    final locale = ref.read(localeProvider).languageCode;
     Clipboard.setData(ClipboardData(text: _card!['cardNumber'] as String));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Karta raqami nusxalandi!'),
-          backgroundColor: AppTheme.successColor, duration: Duration(seconds: 2)),
+      SnackBar(content: Text(AppStrings.get('card_number_copied', locale)),
+          backgroundColor: AppTheme.successColor, duration: const Duration(seconds: 2)),
     );
   }
 
   Future<void> _submit() async {
+    final locale = ref.read(localeProvider).languageCode;
     final amount = double.tryParse(_amountCtrl.text.replaceAll(' ', '').replaceAll(',', ''));
     if (amount == null || amount <= 0) {
-      setState(() => _error = 'To\'g\'ri summa kiriting');
+      setState(() => _error = AppStrings.get('topup_amount_error', locale));
       return;
     }
     if (_receiptBytes == null) {
-      setState(() => _error = 'Chek rasmini yuklang');
+      setState(() => _error = AppStrings.get('receipt_required_error', locale));
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -422,13 +428,14 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
       setState(() { _loading = false; _success = true; });
       widget.onDone();
     } catch (_) {
-      setState(() { _loading = false; _error = 'Xatolik yuz berdi. Qayta urinib ko\'ring.'; });
+      setState(() { _loading = false; _error = AppStrings.get('topup_generic_error', locale); });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
+    final locale = ref.watch(localeProvider).languageCode;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
@@ -445,11 +452,11 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
         left: 20, right: 20, top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      child: _success ? _buildSuccess(textPrimary) : _buildForm(isDark, surface, textPrimary, textSecondary, border, bg),
+      child: _success ? _buildSuccess(textPrimary, locale) : _buildForm(isDark, surface, textPrimary, textSecondary, border, bg, locale),
     );
   }
 
-  Widget _buildSuccess(Color textPrimary) {
+  Widget _buildSuccess(Color textPrimary, String locale) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -462,12 +469,12 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
           child: const Icon(Icons.check_circle, color: AppTheme.successColor, size: 36),
         ),
         const SizedBox(height: 16),
-        Text('So\'rov yuborildi!',
+        Text(AppStrings.get('topup_request_sent', locale),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textPrimary),
             textAlign: TextAlign.center),
         const SizedBox(height: 8),
-        const Text('Admin tasdiqlashini kuting.\nOdatda 5-30 daqiqa ichida balansga qo\'shiladi.',
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+        Text(AppStrings.get('topup_pending_note', locale),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
             textAlign: TextAlign.center),
         const SizedBox(height: 24),
         GestureDetector(
@@ -478,15 +485,15 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
               gradient: const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Center(child: Text('Yopish',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15))),
+            child: Center(child: Text(AppStrings.get('close', locale),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15))),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildForm(bool isDark, Color surface, Color textPrimary, Color textSecondary, Color border, Color bg) {
+  Widget _buildForm(bool isDark, Color surface, Color textPrimary, Color textSecondary, Color border, Color bg, String locale) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,14 +501,14 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
         Center(child: Container(width: 36, height: 4,
             decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
         const SizedBox(height: 16),
-        Text('Balans to\'ldirish',
+        Text(AppStrings.get('topup_balance', locale),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary)),
         const SizedBox(height: 16),
 
         if (_cardLoading)
           const Center(child: AppLoadingIndicator())
         else if (_card != null) ...[
-          Text('Pul o\'tkaziladigan karta:',
+          Text(AppStrings.get('topup_card_label', locale),
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
           const SizedBox(height: 8),
           Container(
@@ -538,12 +545,12 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
                         decoration: BoxDecoration(
                             color: AppTheme.primaryColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8)),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.copy, size: 14, color: AppTheme.primaryColor),
-                            SizedBox(width: 4),
-                            Text('Nusxa', style: TextStyle(fontSize: 11, color: AppTheme.primaryColor,
+                            const Icon(Icons.copy, size: 14, color: AppTheme.primaryColor),
+                            const SizedBox(width: 4),
+                            Text(AppStrings.get('copy_label', locale), style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor,
                                 fontWeight: FontWeight.w600)),
                           ],
                         ),
@@ -559,15 +566,15 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: AppTheme.primaryColor.withOpacity(0.15)),
                   ),
-                  child: const Row(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: AppTheme.primaryColor),
-                      SizedBox(width: 6),
+                      const Icon(Icons.info_outline, size: 14, color: AppTheme.primaryColor),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Ushbu karta raqamini nusxalab, Click yoki Payme orqali to\'lov qiling, so\'ng chekini yuklang.',
-                          style: TextStyle(fontSize: 11, color: AppTheme.primaryColor, height: 1.4),
+                          AppStrings.get('topup_card_hint', locale),
+                          style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor, height: 1.4),
                         ),
                       ),
                     ],
@@ -584,8 +591,8 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
             ),
-            child: const Text('Hozirda aktiv to\'lov kartasi yo\'q.',
-                style: TextStyle(color: AppTheme.warningColor, fontSize: 13)),
+            child: Text(AppStrings.get('no_active_card', locale),
+                style: const TextStyle(color: AppTheme.warningColor, fontSize: 13)),
           ),
         ],
         const SizedBox(height: 14),
@@ -594,12 +601,12 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
           controller: _amountCtrl,
           keyboardType: TextInputType.number,
           style: TextStyle(color: textPrimary),
-          decoration: const InputDecoration(
-              labelText: 'To\'lov summasi (so\'m)', hintText: '500 000', suffixText: 'so\'m'),
+          decoration: InputDecoration(
+              labelText: AppStrings.get('topup_amount_label', locale), hintText: '500 000', suffixText: 'so\'m'),
         ),
         const SizedBox(height: 4),
-        const Text('Tashlagan summangizni to\'liq va to\'g\'ri kiriting. Chek bilan bir xil bo\'lsin.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.4)),
+        Text(AppStrings.get('topup_amount_note', locale),
+            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.4)),
         const SizedBox(height: 14),
 
         GestureDetector(
@@ -617,7 +624,7 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
                 Icon(_receiptBytes != null ? Icons.check_circle : Icons.upload_outlined,
                     color: _receiptBytes != null ? AppTheme.successColor : textSecondary, size: 20),
                 const SizedBox(width: 10),
-                Text(_receiptBytes != null ? 'Chek yuklandi ✓' : 'Chek rasmini yuklang',
+                Text(_receiptBytes != null ? AppStrings.get('receipt_uploaded', locale) : AppStrings.get('receipt_upload_prompt', locale),
                     style: TextStyle(fontSize: 13,
                         color: _receiptBytes != null ? AppTheme.successColor : textSecondary,
                         fontWeight: _receiptBytes != null ? FontWeight.w600 : FontWeight.w400)),
@@ -626,8 +633,8 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
           ),
         ),
         const SizedBox(height: 4),
-        const Text('Chek rasmini galereyadan tanlang. Aniq va o\'qilishi mumkin bo\'lsin.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.4)),
+        Text(AppStrings.get('receipt_upload_hint', locale),
+            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.4)),
 
         if (_error != null) ...[
           const SizedBox(height: 10),
@@ -657,7 +664,7 @@ class _TopupSheetState extends ConsumerState<_TopupSheet> {
                       child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2.5))
                 else
                   Text(
-                    (_card == null) ? 'Karta yo\'q' : 'Jo\'natish',
+                    (_card == null) ? AppStrings.get('no_card_label', locale) : AppStrings.get('submit_label', locale),
                     style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 15)),
               ],
             ),

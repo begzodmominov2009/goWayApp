@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/providers/driver_cache_providers.dart';
+import '../../../../core/localization/locale_provider.dart';
+import '../../../../core/localization/app_strings.dart';
 
 class WalletTransactionHistoryScreen extends ConsumerStatefulWidget {
   const WalletTransactionHistoryScreen({super.key});
@@ -52,6 +54,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
   }
 
   Map<String, List<dynamic>> get _grouped {
+    final locale = ref.read(localeProvider).languageCode;
     final Map<String, List<dynamic>> grouped = {};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -62,16 +65,16 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
       final date = dateStr != null ? DateTime.tryParse(dateStr) : null;
       String label;
       if (date == null) {
-        label = 'Boshqa';
+        label = AppStrings.get('other_date_label', locale);
       } else {
         final dateOnly = DateTime(date.year, date.month, date.day);
         if (dateOnly == today) {
-          label = 'Bugun';
+          label = AppStrings.get('today', locale);
         } else if (dateOnly == yesterday) {
-          label = 'Kecha';
+          label = AppStrings.get('yesterday', locale);
         } else {
-          const months = ['yan', 'fev', 'mar', 'apr', 'may', 'iyun', 'iyul', 'avg', 'sen', 'okt', 'noy', 'dek'];
-          label = '${date.day} ${months[date.month - 1]} ${date.year}';
+          final monthKey = 'month_short_${date.month.toString().padLeft(2, '0')}';
+          label = '${date.day} ${AppStrings.get(monthKey, locale)} ${date.year}';
         }
       }
       grouped.putIfAbsent(label, () => []).add(tx);
@@ -91,6 +94,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
@@ -109,7 +113,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
           icon: Icon(Icons.arrow_back_ios, color: textPrimary, size: 20),
           onPressed: () => context.pop(),
         ),
-        title: Text('Tranzaksiyalar tarixi',
+        title: Text(AppStrings.get('transaction_history_title', locale),
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
@@ -128,7 +132,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
                 controller: _searchCtrl,
                 style: TextStyle(fontSize: 14, color: textPrimary),
                 decoration: InputDecoration(
-                  hintText: 'Qidirish...',
+                  hintText: AppStrings.get('search_placeholder', locale),
                   hintStyle: TextStyle(color: textSecondary, fontSize: 14),
                   filled: false,
                   border: InputBorder.none,
@@ -150,7 +154,7 @@ class _WalletTransactionHistoryScreenState extends ConsumerState<WalletTransacti
             child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
-                    ? Center(child: Text('Tranzaksiyalar topilmadi', style: TextStyle(color: textSecondary)))
+                    ? Center(child: Text(AppStrings.get('no_transactions_found', locale), style: TextStyle(color: textSecondary)))
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView(
