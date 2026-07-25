@@ -338,7 +338,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
             );
           }
         }
-        setState(() => _currentPosition = pos);
+        _currentPosition = pos;
         await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
         if (_activeOrder != null) {
           _updateTracking();
