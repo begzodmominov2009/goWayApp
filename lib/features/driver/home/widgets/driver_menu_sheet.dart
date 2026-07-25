@@ -80,7 +80,7 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           ),
           _MenuTile(
             icon: Icons.event_note,
-            label: 'Rejalashtirilgan buyurtmalar',
+            label: AppStrings.get('scheduled_orders_title', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);

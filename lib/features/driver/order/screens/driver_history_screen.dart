@@ -150,24 +150,25 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
       ),
       body: Column(
         children: [
-          // "Barchasini ko'rish" — to'liq tarix sahifasiga o'tish
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: () => context.push(AppRoutes.driverOrderHistoryFull),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(AppStrings.get('view_all_history', locale),
-                        style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
-                    const Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryColor),
-                  ],
+          // "Barchasini ko'rish" — to'liq tarix sahifasiga o'tish (faqat tarix mavjud bo'lsa)
+          if (_recentOrders.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => context.push(AppRoutes.driverOrderHistoryFull),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(AppStrings.get('view_all_history', locale),
+                          style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+                      const Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryColor),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           // Ro'yxat — oxirgi 7 kunlik, sana bo'yicha guruhlangan
           Expanded(
