@@ -611,30 +611,99 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   Future<void> _showLogoutDialog() async {
     final locale = ref.read(localeProvider).languageCode;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showDialog<bool>(
+    await showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(AppStrings.get('logout', locale),
-            style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                fontWeight: FontWeight.w700)),
-        content: Text('Tizimdan chiqmoqchimisiz?',
-            style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppStrings.get('cancel', locale),
-                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary)),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) {
+        final surface = isDark ? AppTheme.darkSurface : Colors.white;
+        final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+        final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+        final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+        return Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Chiqish', style: TextStyle(color: Color(0xFFdc2626), fontWeight: FontWeight.w700)),
+          padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                  child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: border,
+                          borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                    color: AppTheme.errorColor.withOpacity(0.12),
+                    shape: BoxShape.circle),
+                child: const Icon(Icons.logout_outlined,
+                    color: AppTheme.errorColor, size: 26),
+              ),
+              const SizedBox(height: 16),
+              Text(AppStrings.get('logout_confirm_title', locale),
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary)),
+              const SizedBox(height: 8),
+              Text(AppStrings.get('logout_confirm_message', locale),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: textSecondary)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        side: BorderSide(color: border),
+                        foregroundColor: textSecondary,
+                      ),
+                      child: Text(AppStrings.get('cancel', locale),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _logout();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.errorColor,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: Text(AppStrings.get('confirm_logout', locale),
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
-    if (confirmed == true) await _logout();
   }
 
   Future<void> _logout() async {

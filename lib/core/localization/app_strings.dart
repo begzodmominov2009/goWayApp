@@ -275,6 +275,9 @@ class AppStrings {
       'yes_cancel_order': 'Ha, bekor qilish',
       'no_keep_order': 'Yo\'q',
       'order_cancelled': 'Buyurtma bekor qilindi',
+      'logout_confirm_title': 'Chiqish',
+      'logout_confirm_message': 'Tizimdan chiqmoqchimisiz?',
+      'confirm_logout': 'Ha, chiqish',
       'profile_photo_optional': 'Profil rasmi (ixtiyoriy)',
       'profile_photo_hint': 'Bu majburiy emas, agar yuklamasangiz standart rasm ishlatiladi',
       // ==== Baholash oynasi (rating_dialog) ====
@@ -641,6 +644,9 @@ class AppStrings {
       'yes_cancel_order': 'Да, отменить',
       'no_keep_order': 'Нет',
       'order_cancelled': 'Заказ отменён',
+      'logout_confirm_title': 'Выход',
+      'logout_confirm_message': 'Вы хотите выйти из системы?',
+      'confirm_logout': 'Да, выйти',
       'profile_photo_optional': 'Фото профиля (необязательно)',
       'profile_photo_hint': 'Это необязательно — если не загрузите, будет использовано стандартное изображение',
       // ==== Окно оценки (rating_dialog) ====
@@ -1007,6 +1013,9 @@ class AppStrings {
       'yes_cancel_order': 'Yes, cancel',
       'no_keep_order': 'No',
       'order_cancelled': 'Order cancelled',
+      'logout_confirm_title': 'Log out',
+      'logout_confirm_message': 'Are you sure you want to log out?',
+      'confirm_logout': 'Yes, log out',
       'profile_photo_optional': 'Profile photo (optional)',
       'profile_photo_hint': 'This is optional — if you don\'t upload one, a default image will be used',
       // ==== Rating dialog ====
