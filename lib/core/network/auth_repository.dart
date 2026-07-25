@@ -142,6 +142,14 @@ class AuthRepository {
     });
   }
 
+  Future<void> requestPhoneChange(String newPhone) async {
+    await _dio.post('/auth/change-phone/request', data: {'newPhone': newPhone});
+  }
+
+  Future<void> verifyPhoneChange(String newPhone, String code) async {
+    await _dio.post('/auth/change-phone/verify', data: {'newPhone': newPhone, 'code': code});
+  }
+
   // Refresh token orqali yangi accessToken olish. Bu — asosiy Dio
   // instansiyasidan FOYDALANMAYDI (chunki u interceptor orqali eski
   // token bilan ishlaydi va cheksiz tsiklga tushishi mumkin) — o'z

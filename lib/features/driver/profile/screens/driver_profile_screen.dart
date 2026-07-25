@@ -382,6 +382,11 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                         label: AppStrings.get('change_password', locale),
                         isDark: isDark, onTap: _showChangePasswordSheet),
                     Divider(height: 8, color: border, indent: 68),
+                    _MenuItem(icon: Icons.phone_iphone_outlined,
+                        iconColor: textSecondary,
+                        label: AppStrings.get('change_phone', locale),
+                        isDark: isDark, onTap: _showChangePhoneSheet),
+                    Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.description_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('terms', locale),
@@ -522,6 +527,18 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) => _ChangePasswordSheet(isDark: isDark, locale: locale),
+    );
+  }
+
+  void _showChangePhoneSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.read(localeProvider).languageCode;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _ChangePhoneSheet(isDark: isDark, locale: locale, onDone: _load),
     );
   }
 
@@ -1371,6 +1388,170 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                 const SizedBox(height: 16),
                 _GradientButton(label: AppStrings.get('save', locale),
                     loading: _loading, onTap: _setNewPassword),
+              ],
+            ]),
+    );
+  }
+}
+
+class _ChangePhoneSheet extends ConsumerStatefulWidget {
+  final bool isDark;
+  final String locale;
+  final VoidCallback onDone;
+  const _ChangePhoneSheet({required this.isDark, required this.locale, required this.onDone});
+  @override
+  ConsumerState<_ChangePhoneSheet> createState() => _ChangePhoneSheetState();
+}
+
+class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
+  int _step = 0;
+  final _phoneCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+  bool _success = false;
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    _otpCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _requestChange() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authRepositoryProvider).requestPhoneChange('+998${_phoneCtrl.text.trim()}');
+      setState(() { _step = 1; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _verifyChange() async {
+    if (_otpCtrl.text.length < 6) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authRepositoryProvider).verifyPhoneChange('+998${_phoneCtrl.text.trim()}', _otpCtrl.text);
+      setState(() { _success = true; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final locale = widget.locale;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: _success
+          ? Column(mainAxisSize: MainAxisSize.min, children: [
+              Center(child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 24),
+              const Icon(Icons.check_circle, color: AppTheme.successColor, size: 48),
+              const SizedBox(height: 16),
+              Text(AppStrings.get('phone_changed_success', locale),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              _GradientButton(label: AppStrings.get('close', locale),
+                  onTap: () { Navigator.pop(context); widget.onDone(); }),
+            ])
+          : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              if (_step == 0) ...[
+                Text(AppStrings.get('change_phone', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 16),
+                Text(AppStrings.get('new_phone_number', locale),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                      decoration: BoxDecoration(border: Border(right: BorderSide(color: border))),
+                      child: const Row(children: [
+                        Text('🇺🇿', style: TextStyle(fontSize: 20)),
+                        SizedBox(width: 6),
+                        Text('+998', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
+                        decoration: InputDecoration(
+                          hintText: AppStrings.get('enter_new_phone_hint', locale),
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('submit_label', locale),
+                    loading: _loading, onTap: _requestChange),
+              ],
+              if (_step == 1) ...[
+                Text(AppStrings.get('enter_otp', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 8),
+                Text(AppStrings.get('phone_change_otp_sent', locale)
+                        .replaceAll('{phone}', '+998${_phoneCtrl.text.trim()}'),
+                    style: TextStyle(fontSize: 13, color: textSecondary)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _otpCtrl,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700,
+                      color: textPrimary, letterSpacing: 8),
+                  decoration: const InputDecoration(counterText: ''),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('verify', locale),
+                    loading: _loading, onTap: _verifyChange),
               ],
             ]),
     );
