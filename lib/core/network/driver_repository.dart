@@ -15,7 +15,12 @@ final driverRepositoryProvider = Provider<DriverRepository>((ref) {
 class DriverLineException implements Exception {
   final String reasonKey;
   final String debugMessage;
-  DriverLineException(this.reasonKey, this.debugMessage);
+  // Backend 'bad_request' qaytarganda javob tanasidagi aniq 'message' matni
+  // — UI shu matn asosida bu haqiqatan "yo'nalish faol emas" xatosimi yoki
+  // boshqa sababdan rad etilganini ajrata oladi (client_repository.dartdagi
+  // OrderCreationException.serverMessage bilan bir xil naqsh).
+  final String? serverMessage;
+  DriverLineException(this.reasonKey, this.debugMessage, {this.serverMessage});
 
   @override
   String toString() => 'DriverLineException($reasonKey): $debugMessage';
@@ -237,40 +242,41 @@ class DriverRepository {
     });
   }
 
-  // ==== Haydovchi liniyasi (xizmat ko'rsatadigan yo'nalish) ====
+  // ==== Haydovchi yo'nalishlari (ko'p yo'nalish) ====
 
-  Future<Map<String, dynamic>?> getDriverLine() async {
-    final profile = await getProfile();
-    if (profile['lineActive'] != true) return null;
-    return {
-      'fromRegionId': profile['lineFromRegionId'] as String?,
-      'fromDistrictId': profile['lineFromDistrictId'] as String?,
-      'toRegionId': profile['lineToRegionId'] as String?,
-      'toDistrictId': profile['lineToDistrictId'] as String?,
-      'expiresAt': profile['lineExpiresAt'],
-    };
+  Future<List<Map<String, dynamic>>> getDriverLines() async {
+    final res = await _dio.get('/driver/lines');
+    final list = res.data['data'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<void> setDriverLine({
-    String? fromRegionId, String? fromDistrictId,
-    String? toRegionId, String? toDistrictId,
+  Future<Map<String, dynamic>> createDriverLine({
+    required String fromRegionId, required String fromDistrictId,
+    required String toRegionId, required String toDistrictId,
     int durationHours = 12,
   }) async {
     try {
-      await _dio.post('/driver/line', data: {
-        if (fromRegionId != null) 'fromRegionId': fromRegionId,
-        if (fromDistrictId != null) 'fromDistrictId': fromDistrictId,
-        if (toRegionId != null) 'toRegionId': toRegionId,
-        if (toDistrictId != null) 'toDistrictId': toDistrictId,
+      final res = await _dio.post('/driver/lines', data: {
+        'fromRegionId': fromRegionId, 'fromDistrictId': fromDistrictId,
+        'toRegionId': toRegionId, 'toDistrictId': toDistrictId,
         'durationHours': durationHours,
       });
+      return Map<String, dynamic>.from(res.data['data']);
     } on DioException catch (e) {
       throw _mapLineError(e);
     }
   }
 
-  Future<void> clearDriverLine() async {
-    await _dio.post('/driver/line', data: {});
+  Future<void> updateDriverLine(String lineId, int durationHours) async {
+    try {
+      await _dio.put('/driver/lines/$lineId', data: {'durationHours': durationHours});
+    } on DioException catch (e) {
+      throw _mapLineError(e);
+    }
+  }
+
+  Future<void> deleteDriverLine(String lineId) async {
+    await _dio.delete('/driver/lines/$lineId');
   }
 
   DriverLineException _mapLineError(DioException e) {
@@ -286,7 +292,9 @@ class DriverRepository {
         if (status != null && status >= 500) {
           return DriverLineException('server_error', 'HTTP $status');
         }
-        return DriverLineException('bad_request', 'HTTP $status');
+        final data = e.response?.data;
+        final serverMsg = (data is Map && data['message'] is String) ? data['message'] as String : null;
+        return DriverLineException('bad_request', 'HTTP $status', serverMessage: serverMsg);
       default:
         return DriverLineException('unknown', e.message ?? e.toString());
     }
@@ -294,8 +302,10 @@ class DriverRepository {
 
   // ==== Rejalashtirilgan buyurtmalar ====
 
-  Future<List<Map<String, dynamic>>> getScheduledOrders(String day) async {
-    final res = await _dio.get('/driver/scheduled-orders', queryParameters: {'day': day});
+  Future<List<Map<String, dynamic>>> getScheduledOrders(String day, {String? lineId}) async {
+    final res = await _dio.get('/driver/scheduled-orders', queryParameters: {
+      'day': day, if (lineId != null) 'lineId': lineId,
+    });
     final list = res.data['data'] as List;
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }

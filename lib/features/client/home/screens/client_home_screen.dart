@@ -44,6 +44,11 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   bool _showTopPanel = true;
   String _currentAddressLabel = '';
 
+  DateTime? _lastUserGestureAt;
+
+  bool get _recentlyGestured =>
+      _lastUserGestureAt != null && DateTime.now().difference(_lastUserGestureAt!) < const Duration(seconds: 3);
+
   BitmapDescriptor? _truckIcon;
   BitmapDescriptor? _finishIcon;
   BitmapDescriptor? _myLocationIcon;
@@ -369,6 +374,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   }
 
   void _fitBounds(List<Point> points) {
+    if (_recentlyGestured) return;
     final lats = points.map((p) => p.latitude).toList();
     final lngs = points.map((p) => p.longitude).toList();
     final latSpan = lats.reduce((a, b) => a > b ? a : b) - lats.reduce((a, b) => a < b ? a : b);
@@ -627,6 +633,9 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                 );
               },
               onCameraPositionChanged: (pos, reason, finished) {
+                if (reason == CameraUpdateReason.gestures) {
+                  _lastUserGestureAt = DateTime.now();
+                }
                 if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
                   setState(() => _currentZoom = pos.zoom);
                 }

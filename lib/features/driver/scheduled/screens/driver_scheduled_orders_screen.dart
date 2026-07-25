@@ -1,15 +1,22 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
+import '../../../../core/network/geo_repository.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 /// Rejalashtirilgan (kelajakdagi) buyurtmalar ro'yxati — "Bugun"/"Ertaga"
-/// tablari orasida almashib, har bir buyurtmani ko'rish va qabul qilish
-/// imkonini beradi.
+/// tablari orasida almashib, yo'nalish bo'yicha filtrlab, har bir
+/// buyurtmani ko'rish va qabul qilish imkonini beradi.
 class DriverScheduledOrdersScreen extends ConsumerStatefulWidget {
   const DriverScheduledOrdersScreen({super.key});
 
@@ -22,16 +29,21 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
   bool _loading = true;
   List<Map<String, dynamic>> _orders = [];
 
+  List<_LineOption> _driverLines = [];
+  String? _selectedLineId;
+  String _selectedLineLabel = '';
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadDriverLines();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final list = await ref.read(driverRepositoryProvider).getScheduledOrders(_day);
+      final list = await ref.read(driverRepositoryProvider).getScheduledOrders(_day, lineId: _selectedLineId);
       if (!mounted) return;
       setState(() {
         _orders = list;
@@ -42,9 +54,84 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
     }
   }
 
+  Future<void> _loadDriverLines() async {
+    try {
+      final raw = await ref.read(driverRepositoryProvider).getDriverLines();
+      final items = raw.map((e) => _LineOption.fromJson(e)).toList();
+      if (!mounted) return;
+      setState(() => _driverLines = items);
+      _resolveLineLabels();
+    } catch (_) {}
+  }
+
+  Future<void> _resolveLineLabels() async {
+    if (_driverLines.isEmpty) return;
+    final repo = ref.read(geoRepositoryProvider);
+    final regions = await repo.getAllRegions();
+    final districtsCache = <String, List<GeoDistrict>>{};
+
+    GeoRegion? findRegion(String? id) {
+      if (id == null) return null;
+      for (final r in regions) {
+        if (r.id == id) return r;
+      }
+      return null;
+    }
+
+    GeoDistrict? findDistrict(List<GeoDistrict> list, String? id) {
+      if (id == null) return null;
+      for (final d in list) {
+        if (d.id == id) return d;
+      }
+      return null;
+    }
+
+    for (final line in _driverLines) {
+      if (line.fromDistrictId != null && line.fromRegionId != null) {
+        districtsCache[line.fromRegionId!] ??= await repo.getAllDistricts(line.fromRegionId!);
+        line.fromLabel = findDistrict(districtsCache[line.fromRegionId!]!, line.fromDistrictId)?.name
+            ?? findRegion(line.fromRegionId)?.name ?? '';
+      } else {
+        line.fromLabel = findRegion(line.fromRegionId)?.name ?? '';
+      }
+      if (line.toDistrictId != null && line.toRegionId != null) {
+        districtsCache[line.toRegionId!] ??= await repo.getAllDistricts(line.toRegionId!);
+        line.toLabel = findDistrict(districtsCache[line.toRegionId!]!, line.toDistrictId)?.name
+            ?? findRegion(line.toRegionId)?.name ?? '';
+      } else {
+        line.toLabel = findRegion(line.toRegionId)?.name ?? '';
+      }
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
   void _switchDay(String day) {
     if (_day == day) return;
     setState(() => _day = day);
+    _load();
+  }
+
+  Future<void> _openFilterSheet() async {
+    final result = await showModalBottomSheet<_LineOption>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _RouteFilterSheet(lines: _driverLines, currentLineId: _selectedLineId),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _selectedLineId = result.id;
+      _selectedLineLabel = result.id == null ? '' : '${result.fromLabel} → ${result.toLabel}';
+    });
+    _load();
+  }
+
+  void _clearFilter() {
+    setState(() {
+      _selectedLineId = null;
+      _selectedLineLabel = '';
+    });
     _load();
   }
 
@@ -83,6 +170,7 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
 
     return Scaffold(
       backgroundColor: surface,
@@ -128,10 +216,65 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: _selectedLineId != null ? AppTheme.primaryColor.withOpacity(0.1) : bg,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _selectedLineId != null ? AppTheme.primaryColor.withOpacity(0.4) : border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.route_outlined, size: 14, color: _selectedLineId != null ? AppTheme.primaryColor : textSecondary),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _selectedLineId == null ? AppStrings.get('all_routes', locale) : _selectedLineLabel,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600,
+                                color: _selectedLineId != null ? AppTheme.primaryColor : textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (_selectedLineId != null) ...[
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: _clearFilter,
+                              child: const Icon(Icons.close, size: 14, color: AppTheme.primaryColor),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _openFilterSheet,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.tune, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: _loading
-                  ? const Center(child: AppLoadingIndicator())
+                  ? ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      itemCount: 4,
+                      itemBuilder: (ctx, i) => _SkeletonOrderCard(isDark: isDark),
+                    )
                   : _orders.isEmpty
                       ? _EmptyState(locale: locale, textSecondary: textSecondary)
                       : RefreshIndicator(
@@ -149,6 +292,7 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
                                 border: border,
                                 textPrimary: textPrimary,
                                 textSecondary: textSecondary,
+                                isYourRoute: _isYourRoute(order, _driverLines),
                                 onDetail: () => _openDetail(order),
                               );
                             },
@@ -160,6 +304,38 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
       ),
     );
   }
+}
+
+bool _isYourRoute(Map<String, dynamic> order, List<_LineOption> lines) {
+  if (lines.isEmpty) return false;
+  final orderFromDistrictId = order['fromDistrictId'] as String?;
+  final orderToDistrictId = order['toDistrictId'] as String?;
+  final orderFromRegionId = order['fromRegionId'] as String?;
+  final orderToRegionId = order['toRegionId'] as String?;
+  final fromCity = (order['fromCity'] as String? ?? '').toLowerCase();
+  final toCity = (order['toCity'] as String? ?? '').toLowerCase();
+
+  for (final line in lines) {
+    if (orderFromDistrictId != null && orderToDistrictId != null &&
+        line.fromDistrictId != null && line.toDistrictId != null) {
+      if (line.fromDistrictId == orderFromDistrictId && line.toDistrictId == orderToDistrictId) return true;
+      continue;
+    }
+    if (orderFromRegionId != null && orderToRegionId != null &&
+        line.fromRegionId != null && line.toRegionId != null) {
+      if (line.fromRegionId == orderFromRegionId && line.toRegionId == orderToRegionId) return true;
+      continue;
+    }
+    if (fromCity.isNotEmpty && toCity.isNotEmpty && line.fromLabel.isNotEmpty && line.toLabel.isNotEmpty) {
+      final lineFrom = line.fromLabel.toLowerCase();
+      final lineTo = line.toLabel.toLowerCase();
+      if ((fromCity.contains(lineFrom) || lineFrom.contains(fromCity)) &&
+          (toCity.contains(lineTo) || lineTo.contains(toCity))) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 String _formatTime(dynamic iso) {
@@ -180,6 +356,92 @@ String? _extractClientName(Map<String, dynamic> order) {
   final flat = order['clientName'];
   if (flat is String && flat.isNotEmpty) return flat;
   return null;
+}
+
+/// Haydovchining bitta yo'nalishi — filter sheet'da va "Sizning
+/// yo'nalishingiz" solishtiruvida ishlatiladi. `id == null` — "Barcha
+/// yo'nalishlar" (filtrsiz) variantini bildiradi.
+class _LineOption {
+  final String? id;
+  final String? fromRegionId;
+  final String? fromDistrictId;
+  final String? toRegionId;
+  final String? toDistrictId;
+  String fromLabel;
+  String toLabel;
+
+  _LineOption({
+    this.id, this.fromRegionId, this.fromDistrictId,
+    this.toRegionId, this.toDistrictId,
+    this.fromLabel = '', this.toLabel = '',
+  });
+
+  factory _LineOption.fromJson(Map<String, dynamic> json) => _LineOption(
+        id: json['id']?.toString(),
+        fromRegionId: json['fromRegionId'] as String?,
+        fromDistrictId: json['fromDistrictId'] as String?,
+        toRegionId: json['toRegionId'] as String?,
+        toDistrictId: json['toDistrictId'] as String?,
+      );
+}
+
+class _RouteFilterSheet extends ConsumerWidget {
+  final List<_LineOption> lines;
+  final String? currentLineId;
+  const _RouteFilterSheet({required this.lines, required this.currentLineId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 4,
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(AppStrings.get('filter_by_route', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+            ),
+            const SizedBox(height: 6),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.route_outlined, color: currentLineId == null ? AppTheme.primaryColor : textSecondary),
+              title: Text(AppStrings.get('all_routes', locale),
+                  style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary)),
+              trailing: currentLineId == null ? const Icon(Icons.check, color: AppTheme.primaryColor) : null,
+              onTap: () => Navigator.pop(context, _LineOption(id: null)),
+            ),
+            if (lines.isNotEmpty) Divider(height: 1, color: border),
+            ...lines.map((l) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.alt_route, color: currentLineId == l.id ? AppTheme.primaryColor : textSecondary),
+                  title: Text(
+                    '${l.fromLabel} → ${l.toLabel}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary),
+                  ),
+                  trailing: currentLineId == l.id ? const Icon(Icons.check, color: AppTheme.primaryColor) : null,
+                  onTap: () => Navigator.pop(context, l),
+                )),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DayTab extends StatelessWidget {
@@ -250,12 +512,13 @@ class _ScheduledOrderCard extends StatelessWidget {
   final Color border;
   final Color textPrimary;
   final Color textSecondary;
+  final bool isYourRoute;
   final VoidCallback onDetail;
 
   const _ScheduledOrderCard({
     required this.order, required this.isDark, required this.locale,
     required this.surface, required this.border, required this.textPrimary,
-    required this.textSecondary, required this.onDetail,
+    required this.textSecondary, required this.isYourRoute, required this.onDetail,
   });
 
   @override
@@ -291,6 +554,22 @@ class _ScheduledOrderCard extends StatelessWidget {
               Text(priceText, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: textPrimary)),
             ],
           ),
+          if (isYourRoute) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle, size: 11, color: AppTheme.primaryColor),
+                  const SizedBox(width: 4),
+                  Text(AppStrings.get('your_route_badge', locale),
+                      style: const TextStyle(fontSize: 10, color: AppTheme.primaryColor, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -327,6 +606,46 @@ class _ScheduledOrderCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Buyurtma kartasi o'rnida ko'rinadigan miltillovchi skelet.
+class _SkeletonOrderCard extends StatelessWidget {
+  final bool isDark;
+  const _SkeletonOrderCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final highlight = isDark ? const Color(0xFF475569) : const Color(0xFFF1F5F9);
+    final cardBg = isDark ? AppTheme.darkSurface : Colors.white;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: border)),
+      child: Shimmer.fromColors(
+        baseColor: base,
+        highlightColor: highlight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(width: 60, height: 13, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+              const Spacer(),
+              Container(width: 70, height: 13, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            ]),
+            const SizedBox(height: 14),
+            Container(width: double.infinity, height: 13, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 8),
+            Container(width: 140, height: 13, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 14),
+            Container(width: double.infinity, height: 42, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+          ],
+        ),
       ),
     );
   }

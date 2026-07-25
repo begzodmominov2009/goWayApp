@@ -90,6 +90,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   bool _showTopPanel = true;
   String _currentAddressLabel = '';
 
+  // Foydalanuvchi xaritani qo'lda oxirgi marta qachon harakatlantirganini
+  // saqlaydi — dasturiy kamera surish (_followCamera) shu bilan
+  // to'qnashib, gesture'ni "qotib qolgandek" his qildirmasligi uchun.
+  DateTime? _lastUserGestureAt;
+
+  bool get _recentlyGestured =>
+      _lastUserGestureAt != null && DateTime.now().difference(_lastUserGestureAt!) < const Duration(seconds: 3);
+
   BitmapDescriptor? _truckIcon;
   BitmapDescriptor? _finishIcon;
   BitmapDescriptor? _myLocationIcon;
@@ -354,7 +362,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           }
         } else {
           _updateMyLocationPin();
-          _followCamera(pos.latitude, pos.longitude);
         }
       } catch (_) {}
     });
@@ -425,6 +432,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   // Kamera nishoni driver joylashuvidan bearing bo'yicha biroz oldinga
   // siljitiladi — natijada driver ekran markazidan pastroqda ko'rinadi.
   void _followCamera(double lat, double lng) {
+    if (_recentlyGestured) return;
     final target = _offsetPoint(lat, lng, _currentBearing, _kNavForwardOffsetMeters);
     _mapController?.moveCamera(
       CameraUpdate.newCameraPosition(
@@ -963,6 +971,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                 }
               },
               onCameraPositionChanged: (pos, reason, finished) {
+                if (reason == CameraUpdateReason.gestures) {
+                  _lastUserGestureAt = DateTime.now();
+                }
                 if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
                   setState(() => _currentZoom = pos.zoom);
                 }

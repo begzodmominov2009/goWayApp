@@ -1,16 +1,100 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geo_repository.dart';
-import '../../../../shared/widgets/app_loading_indicator.dart';
+import 'region_picker_page.dart';
+import 'district_picker_page.dart';
 
-/// Haydovchi xizmat ko'rsatadigan yo'nalishni (liniyani) belgilash sahifasi.
-/// Yuqorida joriy liniya ko'rsatiladi (bekor qilish imkoni bilan), pastda
-/// "Qayerdan" -> "Qayerga" ikki bosqichli viloyat/tuman tanlash (xaritasiz)
-/// va davomiylik tanlab tasdiqlash bo'limi joylashgan.
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
+const _kPrimaryGradient = LinearGradient(
+  colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)],
+  begin: Alignment.centerLeft, end: Alignment.centerRight,
+);
+
+String _formatDateTime(DateTime dt) {
+  final local = dt.toLocal();
+  final d = local.day.toString().padLeft(2, '0');
+  final m = local.month.toString().padLeft(2, '0');
+  final h = local.hour.toString().padLeft(2, '0');
+  final min = local.minute.toString().padLeft(2, '0');
+  return '$d.$m $h:$min';
+}
+
+/// Ilovadagi standart "yondan slide" o'tish animatsiyasi — boshqa barcha
+/// sahifalar (app_router.dart'dagi _slidePage) qanday ochilsa, viloyat/
+/// tuman tanlash sahifalari ham xuddi shunday ochiladi.
+Route<T> _slideRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (context, animation, secondaryAnimation) => page,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+        child: child,
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 280),
+  );
+}
+
+/// Backend 'bad_request' bilan javob berganda, uning aynan "yo'nalish
+/// hozircha faol emas" sababidan rad etilganini xabar matnidan taxmin
+/// qiladi (client_repository.dart'dagi bad_request tekshiruviga o'xshash,
+/// lekin bu yerda aniq matn signaliga tayanadi — backend boshqa sababdan
+/// (masalan noto'g'ri davomiylik) rad etsa, umumiy xato ko'rsatiladi).
+bool _looksLikeInactiveRouteError(String message) {
+  final lower = message.toLowerCase();
+  return lower.contains('faol emas') || lower.contains('inactive') || lower.contains('не актив');
+}
+
+/// Bitta haydovchi yo'nalishi — backend'dan (/driver/lines) kelgan xom
+/// ma'lumot + Flutter tomonida (viloyat/tuman ro'yxatlaridan) aniqlangan
+/// ko'rsatish nomlari (faqat tuman/shahar darajasida, viloyat nomisiz).
+class _DriverLineItem {
+  final String id;
+  final String? fromRegionId;
+  final String? fromDistrictId;
+  final String? toRegionId;
+  final String? toDistrictId;
+  final DateTime? expiresAt;
+  String fromLabel;
+  String toLabel;
+
+  _DriverLineItem({
+    required this.id,
+    this.fromRegionId, this.fromDistrictId,
+    this.toRegionId, this.toDistrictId,
+    this.expiresAt,
+    this.fromLabel = '', this.toLabel = '',
+  });
+
+  bool get expired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
+
+  factory _DriverLineItem.fromJson(Map<String, dynamic> json) {
+    final expiresAtStr = json['expiresAt'] as String?;
+    return _DriverLineItem(
+      id: json['id'].toString(),
+      fromRegionId: json['fromRegionId'] as String?,
+      fromDistrictId: json['fromDistrictId'] as String?,
+      toRegionId: json['toRegionId'] as String?,
+      toDistrictId: json['toDistrictId'] as String?,
+      expiresAt: expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null,
+    );
+  }
+}
+
+/// Haydovchi xizmat ko'rsatadigan yo'nalishlar ro'yxati sahifasi (ko'p
+/// yo'nalishga o'tilgan backend bilan mos). Yuqorida doim ko'rinadigan
+/// "Yangi yo'nalish yaratish" tugmasi, ostida ro'yxat: yuklanmoqda
+/// (shimmer skelet) / bo'sh / yo'nalishlar kartalari.
 class DriverLineScreen extends ConsumerStatefulWidget {
   const DriverLineScreen({super.key});
 
@@ -19,61 +103,29 @@ class DriverLineScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
-  bool _loadingCurrent = true;
-  Map<String, dynamic>? _currentLine;
-  String _fromLabel = '';
-  String _toLabel = '';
-  bool _clearing = false;
-
-  List<GeoRegion> _regions = [];
-  bool _loadingRegions = true;
-
-  int _phase = 1; // 1 = Qayerdan, 2 = Qayerga
-  bool _pickingDistrict = false;
-  GeoRegion? _activeRegion;
-  List<GeoDistrict> _activeDistricts = [];
-  bool _loadingDistricts = false;
-
-  GeoRegion? _fromRegion;
-  GeoDistrict? _fromDistrict;
-  GeoRegion? _toRegion;
-  GeoDistrict? _toDistrict;
-
-  int _durationHours = 12;
-  bool _submitting = false;
-
-  bool get _selectionComplete => _fromRegion != null && _toRegion != null;
+  bool _loadingLines = true;
+  List<_DriverLineItem> _lines = [];
+  List<GeoRegion>? _regionsCache;
 
   @override
   void initState() {
     super.initState();
-    _loadRegions();
-    _loadCurrentLine();
+    _loadLines();
   }
 
-  Future<void> _loadRegions() async {
-    final list = await ref.read(geoRepositoryProvider).getAllRegions();
-    if (!mounted) return;
-    setState(() {
-      _regions = list;
-      _loadingRegions = false;
-    });
-  }
-
-  Future<void> _loadCurrentLine() async {
-    setState(() => _loadingCurrent = true);
+  Future<void> _loadLines() async {
+    setState(() => _loadingLines = true);
     try {
-      final line = await ref.read(driverRepositoryProvider).getDriverLine();
+      final raw = await ref.read(driverRepositoryProvider).getDriverLines();
+      final items = raw.map((e) => _DriverLineItem.fromJson(e)).toList();
       if (!mounted) return;
       setState(() {
-        _currentLine = line;
-        _fromLabel = '';
-        _toLabel = '';
-        _loadingCurrent = false;
+        _lines = items;
+        _loadingLines = false;
       });
-      if (line != null) _resolveCurrentLineLabels(line);
+      _resolveLabelsForLines();
     } catch (_) {
-      if (mounted) setState(() { _currentLine = null; _loadingCurrent = false; });
+      if (mounted) setState(() { _lines = []; _loadingLines = false; });
     }
   }
 
@@ -93,143 +145,232 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
     return null;
   }
 
-  Future<void> _resolveCurrentLineLabels(Map<String, dynamic> line) async {
+  Future<void> _resolveLabelsForLines() async {
     final repo = ref.read(geoRepositoryProvider);
-    final regions = _regions.isNotEmpty ? _regions : await repo.getAllRegions();
+    _regionsCache ??= await repo.getAllRegions();
+    final regions = _regionsCache!;
+    final districtsCache = <String, List<GeoDistrict>>{};
 
-    final fromRegionId = line['fromRegionId'] as String?;
-    final fromDistrictId = line['fromDistrictId'] as String?;
-    final toRegionId = line['toRegionId'] as String?;
-    final toDistrictId = line['toDistrictId'] as String?;
-
-    final fromRegion = _findRegion(regions, fromRegionId);
-    final toRegion = _findRegion(regions, toRegionId);
-
-    String fromLabel = fromRegion?.name ?? '';
-    String toLabel = toRegion?.name ?? '';
-
-    if (fromRegionId != null && fromDistrictId != null) {
-      final districts = await repo.getAllDistricts(fromRegionId);
-      final d = _findDistrict(districts, fromDistrictId);
-      if (d != null) fromLabel = '$fromLabel, ${d.name}';
-    }
-    if (toRegionId != null && toDistrictId != null) {
-      final districts = await repo.getAllDistricts(toRegionId);
-      final d = _findDistrict(districts, toDistrictId);
-      if (d != null) toLabel = '$toLabel, ${d.name}';
-    }
-
-    if (!mounted) return;
-    setState(() { _fromLabel = fromLabel; _toLabel = toLabel; });
-  }
-
-  Future<void> _clearLine() async {
-    setState(() => _clearing = true);
-    try {
-      await ref.read(driverRepositoryProvider).clearDriverLine();
-      if (!mounted) return;
-      setState(() {
-        _currentLine = null;
-        _fromLabel = '';
-        _toLabel = '';
-        _clearing = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _clearing = false);
-    }
-  }
-
-  Future<void> _selectRegion(GeoRegion region) async {
-    if (!region.isActive) {
-      _showInactiveDialog();
-      return;
-    }
-    setState(() {
-      _activeRegion = region;
-      _pickingDistrict = true;
-      _loadingDistricts = true;
-      _activeDistricts = [];
-    });
-    final list = await ref.read(geoRepositoryProvider).getAllDistricts(region.id);
-    if (!mounted) return;
-    setState(() {
-      _activeDistricts = list;
-      _loadingDistricts = false;
-    });
-  }
-
-  void _selectDistrict(GeoDistrict district) {
-    if (!district.isActive) {
-      _showInactiveDialog();
-      return;
-    }
-    setState(() {
-      if (_phase == 1) {
-        _fromRegion = _activeRegion;
-        _fromDistrict = district;
-        _phase = 2;
+    for (final line in _lines) {
+      if (line.fromDistrictId != null && line.fromRegionId != null) {
+        districtsCache[line.fromRegionId!] ??= await repo.getAllDistricts(line.fromRegionId!);
+        final d = _findDistrict(districtsCache[line.fromRegionId!]!, line.fromDistrictId);
+        line.fromLabel = d?.name ?? _findRegion(regions, line.fromRegionId)?.name ?? '';
       } else {
-        _toRegion = _activeRegion;
-        _toDistrict = district;
+        line.fromLabel = _findRegion(regions, line.fromRegionId)?.name ?? '';
       }
-      _pickingDistrict = false;
-      _activeRegion = null;
-      _activeDistricts = [];
-    });
-  }
 
-  void _backInStepper() {
-    setState(() {
-      if (_pickingDistrict) {
-        _pickingDistrict = false;
-        _activeRegion = null;
-        _activeDistricts = [];
-      } else if (_phase == 2) {
-        _phase = 1;
-        _fromRegion = null;
-        _fromDistrict = null;
+      if (line.toDistrictId != null && line.toRegionId != null) {
+        districtsCache[line.toRegionId!] ??= await repo.getAllDistricts(line.toRegionId!);
+        final d = _findDistrict(districtsCache[line.toRegionId!]!, line.toDistrictId);
+        line.toLabel = d?.name ?? _findRegion(regions, line.toRegionId)?.name ?? '';
+      } else {
+        line.toLabel = _findRegion(regions, line.toRegionId)?.name ?? '';
       }
-    });
+    }
+
+    if (!mounted) return;
+    setState(() {});
   }
 
-  void _resetStepper() {
-    setState(() {
-      _phase = 1;
-      _pickingDistrict = false;
-      _activeRegion = null;
-      _activeDistricts = [];
-      _fromRegion = null;
-      _fromDistrict = null;
-      _toRegion = null;
-      _toDistrict = null;
-      _durationHours = 12;
-    });
+  // ==== Yangi yo'nalish qo'shish — sahifama-sahifa oqim ====
+
+  // Bitta "viloyat -> tuman" juftligini tanlaydi. Tuman sahifasidan orqaga
+  // qaytilsa (natija null), viloyat sahifasi qayta ko'rsatiladi — shu bilan
+  // "faqat bitta bosqich orqaga" hissi beriladi, lekin har bir sahifa
+  // baribir faqat o'zini yopadi (bitta martalik Navigator.push, hech qanday
+  // pushReplacement/popUntil ishlatilmaydi). Viloyat sahifasidan orqaga
+  // qaytilsa, butun juftlik null qaytadi va chaqiruvchi oqim to'xtaydi.
+  Future<(GeoRegion, GeoDistrict)?> _pickRegionAndDistrict(String title) async {
+    while (mounted) {
+      final region = await Navigator.push<GeoRegion>(
+        context,
+        _slideRoute(RegionPickerPage(title: title)),
+      );
+      if (region == null || !mounted) return null;
+
+      final district = await Navigator.push<GeoDistrict>(
+        context,
+        _slideRoute(DistrictPickerPage(title: title, region: region)),
+      );
+      if (district == null) {
+        if (!mounted) return null;
+        continue;
+      }
+      return (region, district);
+    }
+    return null;
   }
 
-  Future<void> _submitLine() async {
-    if (!_selectionComplete || _submitting) return;
-    setState(() => _submitting = true);
+  Future<void> _startAddRouteFlow() async {
+    final locale = ref.read(localeProvider).languageCode;
+
+    final fromResult = await _pickRegionAndDistrict(AppStrings.get('from_question', locale));
+    if (fromResult == null || !mounted) return;
+    final (fromRegion, fromDistrict) = fromResult;
+
+    final toResult = await _pickRegionAndDistrict(AppStrings.get('to_question', locale));
+    if (toResult == null || !mounted) return;
+    final (toRegion, toDistrict) = toResult;
+
+    final routeName = '${fromDistrict.name} → ${toDistrict.name}';
+
+    final duration = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _UpdateDurationSheet(routeName: routeName, initial: 12),
+    );
+    if (duration == null || !mounted) return;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _RouteConfirmSheet(routeName: routeName),
+    );
+    if (confirmed != true || !mounted) return;
+
     try {
-      await ref.read(driverRepositoryProvider).setDriverLine(
-        fromRegionId: _fromRegion!.id,
-        fromDistrictId: _fromDistrict?.id,
-        toRegionId: _toRegion!.id,
-        toDistrictId: _toDistrict?.id,
-        durationHours: _durationHours,
+      await ref.read(driverRepositoryProvider).createDriverLine(
+        fromRegionId: fromRegion.id, fromDistrictId: fromDistrict.id,
+        toRegionId: toRegion.id, toDistrictId: toDistrict.id,
+        durationHours: duration,
       );
       if (!mounted) return;
-      setState(() => _submitting = false);
-      _resetStepper();
-      _loadCurrentLine();
+      _loadLines();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _submitting = false);
-      if (e is DriverLineException && e.reasonKey == 'bad_request') {
-        _showInactiveDialog();
-      } else {
-        _showErrorSnack(e is DriverLineException ? e : null);
-      }
+      _handleLineError(e);
     }
+  }
+
+  // ==== Mavjud yo'nalish: davomiylikni yangilash / qayta faollashtirish / o'chirish ====
+
+  Future<void> _openDurationSheet(_DriverLineItem line) async {
+    var initial = 12;
+    if (line.expiresAt != null) {
+      final remaining = line.expiresAt!.difference(DateTime.now()).inHours;
+      initial = [6, 12, 24].reduce(
+        (a, b) => (remaining - a).abs() <= (remaining - b).abs() ? a : b,
+      );
+    }
+    final routeName = '${line.fromLabel}  →  ${line.toLabel}';
+
+    final newDuration = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _UpdateDurationSheet(routeName: routeName, initial: initial),
+    );
+    if (newDuration == null || !mounted) return;
+
+    try {
+      await ref.read(driverRepositoryProvider).updateDriverLine(line.id, newDuration);
+      if (!mounted) return;
+      _loadLines();
+    } catch (e) {
+      if (!mounted) return;
+      _handleLineError(e);
+    }
+  }
+
+  // Backend 'bad_request' bilan javob berganda, buni har doim "yo'nalish
+  // faol emas" deb talqin qilmaydi — faqat backend xabari haqiqatan shu
+  // sababni ko'rsatsa, inactive-sheet ko'rsatiladi; aks holda (masalan
+  // davomiylik noto'g'ri formatda yoki boshqa tekshiruv xatosi bo'lsa)
+  // umumiy xato xabari (generic_error) ko'rsatiladi.
+  void _handleLineError(Object e) {
+    if (e is DriverLineException && e.reasonKey == 'bad_request') {
+      final msg = e.serverMessage;
+      if (msg != null && _looksLikeInactiveRouteError(msg)) {
+        _showInactiveSheet(message: msg);
+        return;
+      }
+      _showErrorSnack(e);
+      return;
+    }
+    _showErrorSnack(e is DriverLineException ? e : null);
+  }
+
+  Future<void> _deleteLine(_DriverLineItem line) async {
+    final confirmed = await _showDeleteConfirmSheet();
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(driverRepositoryProvider).deleteDriverLine(line.id);
+      if (!mounted) return;
+      final locale = ref.read(localeProvider).languageCode;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.get('route_deleted', locale)), backgroundColor: AppTheme.successColor),
+      );
+      _loadLines();
+    } catch (_) {}
+  }
+
+  Future<bool?> _showDeleteConfirmSheet() {
+    final locale = ref.read(localeProvider).languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 18),
+              const Icon(Icons.delete_outline, size: 40, color: AppTheme.errorColor),
+              const SizedBox(height: 12),
+              Text(AppStrings.get('delete_route', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: border),
+                        foregroundColor: textPrimary,
+                      ),
+                      child: Text(AppStrings.get('cancel', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.errorColor,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(AppStrings.get('delete_route', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showErrorSnack(DriverLineException? e) {
@@ -253,37 +394,57 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
     );
   }
 
-  Future<void> _showInactiveDialog() async {
+  Future<void> _showInactiveSheet({String? message}) async {
     final locale = ref.read(localeProvider).languageCode;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    await showDialog<void>(
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          AppStrings.get('route_inactive_title', locale),
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-            fontWeight: FontWeight.w700, fontSize: 16,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 18),
+              Text(
+                AppStrings.get('route_inactive_title', locale),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message ?? AppStrings.get('route_inactive_message', locale),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: textSecondary),
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  width: double.infinity, height: 50,
+                  decoration: BoxDecoration(gradient: _kPrimaryGradient, borderRadius: BorderRadius.circular(14)),
+                  child: Center(
+                    child: Text(
+                      AppStrings.get('close', locale),
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        content: Text(
-          AppStrings.get('route_inactive_message', locale),
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              AppStrings.get('close', locale),
-              style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -312,7 +473,7 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
                     onPressed: () => Navigator.pop(context),
                   ),
                   Text(
-                    AppStrings.get('my_line', locale),
+                    AppStrings.get('my_routes_label', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary),
                   ),
                 ],
@@ -320,25 +481,13 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildCurrentLineCard(locale, isDark, textPrimary, textSecondary, border),
+              child: _buildCreateButton(locale, textPrimary, border, bg),
             ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                AppStrings.get('set_new_line_title', locale),
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textPrimary),
-              ),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _selectionComplete
-                    ? SingleChildScrollView(
-                        child: _buildCompleteSection(locale, isDark, textPrimary, textSecondary, border, bg),
-                      )
-                    : _buildStepperSection(locale, isDark, textPrimary, textSecondary, border, bg),
+                child: _buildBody(locale, isDark, textPrimary, textSecondary, border),
               ),
             ),
           ],
@@ -347,315 +496,376 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
     );
   }
 
-  Widget _buildCurrentLineCard(String locale, bool isDark, Color textPrimary, Color textSecondary, Color border) {
-    if (_loadingCurrent) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: border),
-        ),
-        child: const Center(child: AppLoadingIndicator(strokeWidth: 2)),
-      );
-    }
-
-    if (_currentLine == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: border),
-        ),
+  Widget _buildCreateButton(String locale, Color textPrimary, Color border, Color bg) {
+    return GestureDetector(
+      onTap: _startAddRouteFlow,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14), border: Border.all(color: border)),
         child: Row(
           children: [
-            Icon(Icons.info_outline, color: textSecondary, size: 20),
+            const Icon(Icons.add_road, color: AppTheme.primaryColor, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                AppStrings.get('no_active_line', locale),
-                style: TextStyle(color: textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+                AppStrings.get('create_new_route', locale),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary),
               ),
             ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 13, color: textPrimary),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody(String locale, bool isDark, Color textPrimary, Color textSecondary, Color border) {
+    if (_loadingLines) {
+      return ListView.builder(
+        itemCount: 3,
+        itemBuilder: (ctx, i) => _SkeletonLineCard(isDark: isDark),
       );
     }
-
-    final fromText = _fromLabel.isNotEmpty ? _fromLabel : AppStrings.get('resolving_label', locale);
-    final toText = _toLabel.isNotEmpty ? _toLabel : AppStrings.get('resolving_label', locale);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+    if (_lines.isEmpty) {
+      return _buildEmptyState(locale, textSecondary);
+    }
+    return RefreshIndicator(
+      onRefresh: _loadLines,
+      child: ListView.separated(
+        padding: const EdgeInsets.only(bottom: 20),
+        itemCount: _lines.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (ctx, i) {
+          final line = _lines[i];
+          return _LineCard(
+            line: line,
+            isDark: isDark,
+            locale: locale,
+            onTapCard: () => _openDurationSheet(line),
+            onDelete: () => _deleteLine(line),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildEmptyState(String locale, Color textSecondary) {
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          Icon(Icons.signpost_outlined, size: 52, color: textSecondary.withOpacity(0.5)),
+          const SizedBox(height: 14),
           Text(
-            AppStrings.get('active_line_label', locale),
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primaryColor, letterSpacing: 0.3),
+            AppStrings.get('no_route_yet', locale),
+            style: TextStyle(fontSize: 14, color: textSecondary, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '$fromText  ↔  $toText',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _clearing ? null : _clearLine,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 44),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                side: const BorderSide(color: AppTheme.errorColor),
-                foregroundColor: AppTheme.errorColor,
+          const SizedBox(height: 18),
+          GestureDetector(
+            onTap: _startAddRouteFlow,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(gradient: _kPrimaryGradient, borderRadius: BorderRadius.circular(14)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.add, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text(AppStrings.get('add_route', locale), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                ],
               ),
-              child: _clearing
-                  ? const SizedBox(width: 18, height: 18, child: AppLoadingIndicator(strokeWidth: 2, color: AppTheme.errorColor))
-                  : Text(AppStrings.get('cancel_line', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildStepperSection(String locale, bool isDark, Color textPrimary, Color textSecondary, Color border, Color bg) {
-    final showBack = _pickingDistrict || _phase == 2;
-    final stepNum = _phase == 1 ? '1/2' : '2/2';
-    final stepLabel = _phase == 1
-        ? AppStrings.get('select_from_region', locale)
-        : AppStrings.get('select_to_region', locale);
+class _LineCard extends StatelessWidget {
+  final _DriverLineItem line;
+  final bool isDark;
+  final String locale;
+  final VoidCallback onTapCard;
+  final VoidCallback onDelete;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            if (showBack)
-              InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: _backInStepper,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.arrow_back_ios, size: 16, color: textPrimary),
-                ),
-              ),
-            if (showBack) const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                stepNum,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.primaryColor),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _pickingDistrict ? (_activeRegion?.name ?? '') : stepLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textPrimary),
-              ),
-            ),
-          ],
+  const _LineCard({
+    required this.line, required this.isDark, required this.locale,
+    required this.onTapCard, required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final expired = line.expired;
+
+    final fromText = line.fromLabel.isNotEmpty ? line.fromLabel : AppStrings.get('resolving_label', locale);
+    final toText = line.toLabel.isNotEmpty ? line.toLabel : AppStrings.get('resolving_label', locale);
+    final validUntilText = line.expiresAt != null ? _formatDateTime(line.expiresAt!) : '';
+
+    return GestureDetector(
+      onTap: onTapCard,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: expired ? AppTheme.errorColor.withOpacity(0.5) : border, width: expired ? 1.5 : 1),
         ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeOutCubic,
-            transitionBuilder: (child, animation) {
-              final offsetAnim = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(animation);
-              return SlideTransition(position: offsetAnim, child: child);
-            },
-            child: _pickingDistrict
-                ? _buildDistrictList(
-                    key: ValueKey('districts_$_phase'),
-                    locale: locale, isDark: isDark,
-                    textPrimary: textPrimary, textSecondary: textSecondary, border: border,
-                  )
-                : _buildRegionList(
-                    key: ValueKey('regions_$_phase'),
-                    locale: locale, isDark: isDark,
-                    textPrimary: textPrimary, textSecondary: textSecondary, border: border,
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRegionList({
-    required Key key,
-    required String locale,
-    required bool isDark,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color border,
-  }) {
-    if (_loadingRegions) {
-      return Center(key: key, child: const AppLoadingIndicator());
-    }
-    if (_regions.isEmpty) {
-      return Center(
-        key: key,
-        child: Text(AppStrings.get('no_results_found', locale), style: TextStyle(color: textSecondary)),
-      );
-    }
-    return ListView.separated(
-      key: key,
-      padding: const EdgeInsets.only(bottom: 16),
-      itemCount: _regions.length,
-      separatorBuilder: (_, __) => Divider(height: 1, color: border),
-      itemBuilder: (ctx, i) {
-        final region = _regions[i];
-        return _GeoListTile(
-          name: region.name,
-          isActive: region.isActive,
-          isDark: isDark,
-          locale: locale,
-          textPrimary: textPrimary,
-          textSecondary: textSecondary,
-          onTap: () => _selectRegion(region),
-        );
-      },
-    );
-  }
-
-  Widget _buildDistrictList({
-    required Key key,
-    required String locale,
-    required bool isDark,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color border,
-  }) {
-    if (_loadingDistricts) {
-      return Center(key: key, child: const AppLoadingIndicator());
-    }
-    if (_activeDistricts.isEmpty) {
-      return Center(
-        key: key,
-        child: Text(AppStrings.get('no_results_found', locale), style: TextStyle(color: textSecondary)),
-      );
-    }
-    return ListView.separated(
-      key: key,
-      padding: const EdgeInsets.only(bottom: 16),
-      itemCount: _activeDistricts.length,
-      separatorBuilder: (_, __) => Divider(height: 1, color: border),
-      itemBuilder: (ctx, i) {
-        final district = _activeDistricts[i];
-        return _GeoListTile(
-          name: district.name,
-          isActive: district.isActive,
-          isDark: isDark,
-          locale: locale,
-          textPrimary: textPrimary,
-          textSecondary: textSecondary,
-          onTap: () => _selectDistrict(district),
-        );
-      },
-    );
-  }
-
-  Widget _buildCompleteSection(String locale, bool isDark, Color textPrimary, Color textSecondary, Color border, Color bg) {
-    final fromText = '${_fromRegion!.name}${_fromDistrict != null ? ', ${_fromDistrict!.name}' : ''}';
-    final toText = '${_toRegion!.name}${_toDistrict != null ? ', ${_toDistrict!.name}' : ''}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.alt_route, size: 18, color: AppTheme.primaryColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$fromText → $toText',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textPrimary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _LineMenuButton(locale: locale, isDark: isDark, onDelete: onDelete),
+              ],
+            ),
+            if (expired) ...[
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  _SummaryRow(icon: Icons.trip_origin, text: fromText, textPrimary: textPrimary),
-                  const SizedBox(height: 6),
-                  _SummaryRow(icon: Icons.flag, text: toText, textPrimary: textPrimary),
+                  const Icon(Icons.warning_amber_rounded, size: 14, color: AppTheme.errorColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      AppStrings.get('route_expired_title', locale),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.errorColor),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            TextButton(
-              onPressed: _resetStepper,
-              child: Text(AppStrings.get('cancel_selection', locale), style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: onTapCard,
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(color: AppTheme.errorColor, borderRadius: BorderRadius.circular(12)),
+                    child: Center(
+                      child: Text(
+                        AppStrings.get('reactivate_route', locale),
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ] else if (validUntilText.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 12, color: textSecondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${AppStrings.get('active_until_label', locale)}: $validUntilText',
+                    style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
-        const SizedBox(height: 18),
-        Text(
-          AppStrings.get('line_duration', locale),
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            _DurationChip(label: AppStrings.get('hours_6', locale), selected: _durationHours == 6, isDark: isDark, onTap: () => setState(() => _durationHours = 6)),
-            const SizedBox(width: 8),
-            _DurationChip(label: AppStrings.get('hours_12', locale), selected: _durationHours == 12, isDark: isDark, onTap: () => setState(() => _durationHours = 12)),
-            const SizedBox(width: 8),
-            _DurationChip(label: AppStrings.get('hours_24', locale), selected: _durationHours == 24, isDark: isDark, onTap: () => setState(() => _durationHours = 24)),
-          ],
-        ),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: _submitting ? null : _submitLine,
-          child: Container(
-            width: double.infinity, height: 50,
-            decoration: BoxDecoration(
-              gradient: _submitting ? null : const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight),
-              color: _submitting ? Colors.grey.withOpacity(0.25) : null,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: _submitting
-                  ? const SizedBox(width: 22, height: 22, child: AppLoadingIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : Text(AppStrings.get('confirm_line', locale), style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
+      ),
     );
   }
 }
 
-class _SummaryRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Color textPrimary;
-  const _SummaryRow({required this.icon, required this.text, required this.textPrimary});
+class _LineMenuButton extends StatelessWidget {
+  final String locale;
+  final bool isDark;
+  final VoidCallback onDelete;
+  const _LineMenuButton({required this.locale, required this.isDark, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: AppTheme.primaryColor),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    return SizedBox(
+      width: 32, height: 32,
+      child: PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert, color: textSecondary, size: 20),
+        padding: EdgeInsets.zero,
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onSelected: (value) {
+          if (value == 'delete') onDelete();
+        },
+        itemBuilder: (ctx) => [
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(children: [
+              const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorColor),
+              const SizedBox(width: 10),
+              Text(
+                AppStrings.get('delete_route', locale),
+                style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w600),
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteConfirmSheet extends ConsumerWidget {
+  final String routeName;
+  const _RouteConfirmSheet({required this.routeName});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 4,
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 18),
+            Container(
+              width: 56, height: 56,
+              decoration: const BoxDecoration(gradient: _kPrimaryGradient, shape: BoxShape.circle),
+              child: const Icon(Icons.check_rounded, color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              AppStrings.get('route_confirm_title', locale),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              routeName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.primaryColor),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              AppStrings.get('route_confirm_desc', locale),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.pop(context, true),
+              child: Container(
+                width: double.infinity, height: 50,
+                decoration: BoxDecoration(gradient: _kPrimaryGradient, borderRadius: BorderRadius.circular(14)),
+                child: Center(
+                  child: Text(
+                    AppStrings.get('understood', locale),
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _UpdateDurationSheet extends ConsumerStatefulWidget {
+  final String routeName;
+  final int initial;
+  const _UpdateDurationSheet({required this.routeName, required this.initial});
+
+  @override
+  ConsumerState<_UpdateDurationSheet> createState() => _UpdateDurationSheetState();
+}
+
+class _UpdateDurationSheetState extends ConsumerState<_UpdateDurationSheet> {
+  late int _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initial;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 4,
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 18),
+            Text(
+              widget.routeName,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textPrimary),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              AppStrings.get('update_duration', locale),
+              style: TextStyle(fontSize: 12, color: textSecondary),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                _DurationChip(label: AppStrings.get('hours_6', locale), selected: _selected == 6, isDark: isDark, onTap: () => setState(() => _selected = 6)),
+                const SizedBox(width: 8),
+                _DurationChip(label: AppStrings.get('hours_12', locale), selected: _selected == 12, isDark: isDark, onTap: () => setState(() => _selected = 12)),
+                const SizedBox(width: 8),
+                _DurationChip(label: AppStrings.get('hours_24', locale), selected: _selected == 24, isDark: isDark, onTap: () => setState(() => _selected = 24)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.pop(context, _selected),
+              child: Container(
+                width: double.infinity, height: 50,
+                decoration: BoxDecoration(gradient: _kPrimaryGradient, borderRadius: BorderRadius.circular(14)),
+                child: Center(
+                  child: Text(
+                    AppStrings.get('save', locale),
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -696,63 +906,39 @@ class _DurationChip extends StatelessWidget {
   }
 }
 
-class _GeoListTile extends StatelessWidget {
-  final String name;
-  final bool isActive;
-  final String locale;
+/// Yo'nalish kartasi o'rnida ko'rinadigan miltillovchi skelet — nom
+/// o'rnida keng, sana o'rnida tor to'rtburchak.
+class _SkeletonLineCard extends StatelessWidget {
   final bool isDark;
-  final Color textPrimary;
-  final Color textSecondary;
-  final VoidCallback onTap;
-
-  const _GeoListTile({
-    required this.name,
-    required this.isActive,
-    required this.locale,
-    required this.isDark,
-    required this.textPrimary,
-    required this.textSecondary,
-    required this.onTap,
-  });
+  const _SkeletonLineCard({required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600,
-                    color: isActive ? textPrimary : textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (!isActive)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    AppStrings.get('route_inactive_badge', locale),
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textSecondary),
-                  ),
-                )
-              else
-                Icon(Icons.arrow_forward_ios_rounded, size: 13, color: textSecondary),
-            ],
-          ),
+    final base = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final highlight = isDark ? const Color(0xFF475569) : const Color(0xFFF1F5F9);
+    final cardBg = isDark ? AppTheme.darkSurface : Colors.white;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: border)),
+      child: Shimmer.fromColors(
+        baseColor: base,
+        highlightColor: highlight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity, height: 16,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: 120, height: 12,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+            ),
+          ],
         ),
       ),
     );

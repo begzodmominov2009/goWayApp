@@ -71,7 +71,7 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
           ),
           _MenuTile(
             icon: Icons.alt_route,
-            label: 'Mening liniyam',
+            label: AppStrings.get('my_line', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
@@ -104,24 +104,6 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
             onTap: () {
               Navigator.pop(context);
               context.push(AppRoutes.driverProfile);
-            },
-          ),
-          _MenuTile(
-            icon: Icons.feedback_outlined,
-            label: AppStrings.get('feedback', locale),
-            isDark: isDark,
-            onTap: () {
-              Navigator.pop(context);
-              context.push(AppRoutes.feedback);
-            },
-          ),
-          _MenuTile(
-            icon: Icons.help_outline,
-            label: AppStrings.get('faq', locale),
-            isDark: isDark,
-            onTap: () {
-              Navigator.pop(context);
-              context.push(AppRoutes.faq);
             },
           ),
         ],
