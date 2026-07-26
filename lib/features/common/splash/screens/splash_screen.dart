@@ -77,6 +77,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _checkAuth() async {
+    final startTime = DateTime.now();
     final authRepo = ref.read(authRepositoryProvider);
 
     // Token/role o'qish va MapKit pinlarini tayyorlash — PARALLEL
@@ -90,6 +91,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final token = results[0] as String?;
     final role = results[1] as String?;
 
+    if (!mounted) return;
+
+    // Splash ekrani keyingi ekran (masalan xarita) to'liq tayyor bo'lmasdan
+    // turib tez yopilib ketmasligi uchun, kamida 3 soniya ko'rinib turishi
+    // kerak — so'rovlar tezroq tugasa, qolgan vaqtga kutamiz.
+    final elapsed = DateTime.now().difference(startTime);
+    final remaining = const Duration(seconds: 3) - elapsed;
+    if (remaining > Duration.zero) {
+      await Future.delayed(remaining);
+    }
     if (!mounted) return;
 
     if (token != null && role != null) {
