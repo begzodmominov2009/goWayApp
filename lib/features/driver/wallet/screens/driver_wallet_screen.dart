@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
+import '../../../../shared/widgets/tutorial_sheet.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/providers/driver_cache_providers.dart';
 import '../../../../core/router/app_router.dart';
@@ -42,6 +44,33 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
     super.initState();
     // Ochilganda: kesh eskirgan bo'lsagina yangilaydi, aks holda keshdan.
     ref.read(driverWalletCacheProvider.notifier).refreshIfStale();
+    _maybeShowWalletTutorial();
+  }
+
+  Future<void> _maybeShowWalletTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('seen_wallet_tutorial') == true) return;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showWalletTutorial();
+    });
+    await prefs.setBool('seen_wallet_tutorial', true);
+  }
+
+  void _showWalletTutorial() {
+    final locale = ref.read(localeProvider).languageCode;
+    showTutorialSheet(
+      context,
+      title: AppStrings.get('tutorial_wallet_title', locale),
+      bullets: [
+        AppStrings.get('tutorial_wallet_1', locale),
+        AppStrings.get('tutorial_wallet_2', locale),
+        AppStrings.get('tutorial_wallet_3', locale),
+        AppStrings.get('tutorial_wallet_4', locale),
+      ],
+      icon: Icons.account_balance_wallet_outlined,
+      locale: locale,
+    );
   }
 
   // Majburiy yangilash — pull-to-refresh va topup so'rovidan keyin.
@@ -118,6 +147,12 @@ class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
         title: Text(AppStrings.get('wallet', locale),
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.help_outline, color: textSecondary, size: 20),
+            onPressed: _showWalletTutorial,
+          ),
+        ],
       ),
       body: loading
           ? const Center(child: AppLoadingIndicator())

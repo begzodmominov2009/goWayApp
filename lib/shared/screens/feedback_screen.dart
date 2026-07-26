@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_loading_indicator.dart';
+import '../../shared/widgets/tutorial_sheet.dart';
 import '../../core/localization/locale_provider.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/network/feedback_repository.dart';
@@ -21,6 +23,37 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
   Uint8List? _imageBytes;
   String? _imageName;
   bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeShowFeedbackTutorial();
+  }
+
+  Future<void> _maybeShowFeedbackTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('seen_feedback_tutorial') == true) return;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showFeedbackTutorial();
+    });
+    await prefs.setBool('seen_feedback_tutorial', true);
+  }
+
+  void _showFeedbackTutorial() {
+    final locale = ref.read(localeProvider).languageCode;
+    showTutorialSheet(
+      context,
+      title: AppStrings.get('tutorial_feedback_title', locale),
+      bullets: [
+        AppStrings.get('tutorial_feedback_1', locale),
+        AppStrings.get('tutorial_feedback_2', locale),
+        AppStrings.get('tutorial_feedback_3', locale),
+      ],
+      icon: Icons.feedback_outlined,
+      locale: locale,
+    );
+  }
 
   @override
   void dispose() {
@@ -96,6 +129,12 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.help_outline, color: textSecondary, size: 20),
+            onPressed: _showFeedbackTutorial,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

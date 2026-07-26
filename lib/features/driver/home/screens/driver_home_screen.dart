@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -20,6 +21,7 @@ import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/rating_dialog.dart';
+import '../../../../shared/widgets/tutorial_sheet.dart';
 import '../widgets/driver_menu_sheet.dart';
 
 const double _kMinZoom = 3.0;
@@ -151,6 +153,33 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _syncOnlineStatus();
     _loadUnreadNotifCount();
     _notifCountTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadUnreadNotifCount());
+    _maybeShowHomeTutorial();
+  }
+
+  Future<void> _maybeShowHomeTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('seen_home_tutorial') == true) return;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showHomeTutorial();
+    });
+    await prefs.setBool('seen_home_tutorial', true);
+  }
+
+  void _showHomeTutorial() {
+    final locale = ref.read(localeProvider).languageCode;
+    showTutorialSheet(
+      context,
+      title: AppStrings.get('tutorial_home_title', locale),
+      bullets: [
+        AppStrings.get('tutorial_home_1', locale),
+        AppStrings.get('tutorial_home_2', locale),
+        AppStrings.get('tutorial_home_3', locale),
+        AppStrings.get('tutorial_home_4', locale),
+      ],
+      icon: Icons.explore_outlined,
+      locale: locale,
+    );
   }
 
   Future<void> _loadUnreadNotifCount() async {
@@ -1033,6 +1062,19 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                           ),
                         ),
                         const Spacer(),
+                        GestureDetector(
+                          onTap: _showHomeTutorial,
+                          child: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: surface,
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+                            ),
+                            child: Icon(Icons.help_outline, color: textPrimary, size: 18),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         GestureDetector(
                           onTap: _toggleOnline,
                           child: _StatusBadge(isOnline: _isOnline, loading: _onlineLoading, locale: locale),
