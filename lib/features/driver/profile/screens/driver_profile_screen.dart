@@ -384,7 +384,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                     Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.phone_iphone_outlined,
                         iconColor: textSecondary,
-                        label: AppStrings.get('change_phone', locale),
+                        label: AppStrings.get('phone_number_label', locale),
                         value: _profile?['user']?['phone'] ?? '',
                         isDark: isDark, onTap: _showChangePhoneSheet),
                     Divider(height: 8, color: border, indent: 68),
@@ -1880,12 +1880,14 @@ class _MenuItem extends StatelessWidget {
         ),
         child: Icon(icon, size: 19, color: iconColor),
       ),
-      title: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
+      title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (value != null)
-            Text(value!, style: TextStyle(fontSize: 12, color: textSecondary)),
+            Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: textSecondary)),
           const SizedBox(width: 4),
           if (onTap != null)
             Icon(Icons.chevron_right, size: 18, color: textSecondary),
