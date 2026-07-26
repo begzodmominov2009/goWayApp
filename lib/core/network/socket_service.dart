@@ -100,6 +100,13 @@ class SocketService {
     });
   }
 
+  // Yangi bildirishnoma keldi tingla
+  void onNotification(void Function(Map<String, dynamic> data) callback) {
+    _socket?.on('notification:new', (data) {
+      callback(Map<String, dynamic>.from(data));
+    });
+  }
+
   void off(String event) {
     _socket?.off(event);
   }

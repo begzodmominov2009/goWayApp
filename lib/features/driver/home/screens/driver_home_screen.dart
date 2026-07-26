@@ -17,6 +17,7 @@ import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/notification_repository.dart';
 import '../../../../core/network/rating_repository.dart';
 import '../../../../core/network/sos_repository.dart';
+import '../../../../core/network/socket_service.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
@@ -152,8 +153,39 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _initLocation();
     _syncOnlineStatus();
     _loadUnreadNotifCount();
-    _notifCountTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadUnreadNotifCount());
+    _notifCountTimer = Timer.periodic(const Duration(seconds: 60), (_) => _loadUnreadNotifCount());
     _maybeShowHomeTutorial();
+    _initSocket();
+  }
+
+  // Socket ulanishi — offer va notification'lar uchun tezkor (real-time)
+  // yo'l. REST polling (_startOfferPolling, _notifCountTimer) zaxira
+  // sifatida davom etadi, shuning uchun socket ulanmasa yoki xato bersa
+  // ham ilova buzilmaydi.
+  Future<void> _initSocket() async {
+    try {
+      await ref.read(socketServiceProvider).connect();
+      if (!mounted) return;
+      ref.read(socketServiceProvider).onNewOffer((offer) {
+        if (!mounted || !_isOnline || _hasOrder || _activeOrder != null) return;
+        setState(() {
+          _currentOfferId = offer['offerId'] as String;
+          _currentOrder = {
+            'id': offer['orderId'],
+            'fromCity': offer['fromCity'],
+            'toCity': offer['toCity'],
+            'price': offer['price'],
+            'truckType': offer['truckType'],
+            'weight': offer['weight'],
+          };
+          _hasOrder = true;
+        });
+      });
+      ref.read(socketServiceProvider).onNotification((data) {
+        if (!mounted) return;
+        _loadUnreadNotifCount();
+      });
+    } catch (_) {}
   }
 
   Future<void> _maybeShowHomeTutorial() async {
@@ -245,6 +277,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _trackingTimer?.cancel();
     _notifCountTimer?.cancel();
     _mapObjectsNotifier.dispose();
+    ref.read(socketServiceProvider).disconnect();
     super.dispose();
   }
 
@@ -368,6 +401,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
         }
         _currentPosition = pos;
         await ref.read(driverRepositoryProvider).updateLocation(pos.latitude, pos.longitude);
+        ref.read(socketServiceProvider).sendLocation(pos.latitude, pos.longitude);
         if (_activeOrder != null) {
           _updateTracking();
           if (_savedRoutePoints != null && _currentSteps.isNotEmpty) {
@@ -511,7 +545,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
 
   void _startOfferPolling() {
     _offerTimer?.cancel();
-    _offerTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _offerTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       if (!_isOnline || _hasOrder || _activeOrder != null) return;
       try {
         final offers = await ref.read(driverRepositoryProvider).getOffers();
