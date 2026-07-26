@@ -122,7 +122,13 @@ CustomTransitionPage _fadePage(Widget child, GoRouterState state) {
     child: child,
     transitionDuration: const Duration(milliseconds: 250),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(opacity: animation, child: child);
+      return FadeTransition(
+        opacity: animation,
+        child: FadeTransition(
+          opacity: Tween<double>(begin: 1, end: 0).animate(secondaryAnimation),
+          child: child,
+        ),
+      );
     },
   );
 }
