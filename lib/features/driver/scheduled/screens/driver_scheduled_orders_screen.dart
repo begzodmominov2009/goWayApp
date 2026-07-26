@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
@@ -8,6 +9,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geo_repository.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
+import '../../../../shared/widgets/tutorial_sheet.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
@@ -38,6 +40,33 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
     super.initState();
     _load();
     _loadDriverLines();
+    _maybeShowScheduledTutorial();
+  }
+
+  Future<void> _maybeShowScheduledTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('seen_scheduled_tutorial') == true) return;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showScheduledTutorial();
+    });
+    await prefs.setBool('seen_scheduled_tutorial', true);
+  }
+
+  void _showScheduledTutorial() {
+    final locale = ref.read(localeProvider).languageCode;
+    showTutorialSheet(
+      context,
+      title: AppStrings.get('tutorial_scheduled_title', locale),
+      bullets: [
+        AppStrings.get('tutorial_scheduled_1', locale),
+        AppStrings.get('tutorial_scheduled_2', locale),
+        AppStrings.get('tutorial_scheduled_3', locale),
+        AppStrings.get('tutorial_scheduled_4', locale),
+      ],
+      icon: Icons.event_note,
+      locale: locale,
+    );
   }
 
   Future<void> _load() async {
@@ -188,6 +217,11 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
                   Text(
                     AppStrings.get('scheduled_orders_title', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.help_outline, color: textSecondary, size: 20),
+                    onPressed: _showScheduledTutorial,
                   ),
                 ],
               ),

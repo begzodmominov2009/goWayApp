@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geo_repository.dart';
+import '../../../../shared/widgets/tutorial_sheet.dart';
 import 'region_picker_page.dart';
 import 'district_picker_page.dart';
 
@@ -111,6 +113,33 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
   void initState() {
     super.initState();
     _loadLines();
+    _maybeShowRoutesTutorial();
+  }
+
+  Future<void> _maybeShowRoutesTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('seen_routes_tutorial') == true) return;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showRoutesTutorial();
+    });
+    await prefs.setBool('seen_routes_tutorial', true);
+  }
+
+  void _showRoutesTutorial() {
+    final locale = ref.read(localeProvider).languageCode;
+    showTutorialSheet(
+      context,
+      title: AppStrings.get('tutorial_routes_title', locale),
+      bullets: [
+        AppStrings.get('tutorial_routes_1', locale),
+        AppStrings.get('tutorial_routes_2', locale),
+        AppStrings.get('tutorial_routes_3', locale),
+        AppStrings.get('tutorial_routes_4', locale),
+      ],
+      icon: Icons.alt_route,
+      locale: locale,
+    );
   }
 
   Future<void> _loadLines() async {
@@ -203,6 +232,26 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
   }
 
   Future<void> _startAddRouteFlow() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    if (prefs.getBool('seen_create_route_tutorial') != true) {
+      final tutorialLocale = ref.read(localeProvider).languageCode;
+      await showTutorialSheet(
+        context,
+        title: AppStrings.get('tutorial_create_route_title', tutorialLocale),
+        bullets: [
+          AppStrings.get('tutorial_create_route_1', tutorialLocale),
+          AppStrings.get('tutorial_create_route_2', tutorialLocale),
+          AppStrings.get('tutorial_create_route_3', tutorialLocale),
+          AppStrings.get('tutorial_create_route_4', tutorialLocale),
+        ],
+        icon: Icons.add_road,
+        locale: tutorialLocale,
+      );
+      if (!mounted) return;
+      await prefs.setBool('seen_create_route_tutorial', true);
+    }
+
     final locale = ref.read(localeProvider).languageCode;
 
     final fromResult = await _pickRegionAndDistrict(AppStrings.get('from_question', locale));
@@ -475,6 +524,11 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
                   Text(
                     AppStrings.get('my_routes_label', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.help_outline, color: textSecondary, size: 20),
+                    onPressed: _showRoutesTutorial,
                   ),
                 ],
               ),
