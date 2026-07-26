@@ -142,6 +142,10 @@ class AuthRepository {
     });
   }
 
+  Future<void> verifyResetOtp(String phone, String code) async {
+    await _dio.post('/auth/verify-reset-otp', data: {'phone': phone, 'code': code});
+  }
+
   Future<void> requestPhoneChange(String newPhone) async {
     await _dio.post('/auth/change-phone/request', data: {'newPhone': newPhone});
   }

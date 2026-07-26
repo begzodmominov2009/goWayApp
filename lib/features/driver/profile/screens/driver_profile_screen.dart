@@ -1181,6 +1181,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   void initState() {
     super.initState();
     _phoneCtrl.text = widget.driverPhone.replaceFirst('+998', '').replaceAll(RegExp(r'\D'), '');
+    _otpCtrl.addListener(() => setState(() {}));
   }
 
   @override
@@ -1215,13 +1216,14 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   }
 
   Future<void> _sendForgotOtp() async {
-    if (_phoneCtrl.text.length < 9) {
+    final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+    if (rawPhone.length != 9) {
       setState(() => _error = AppStrings.get('phone_incomplete_error', widget.locale));
       return;
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await ref.read(authRepositoryProvider).sendOtp('+998${_phoneCtrl.text.trim()}', 'DRIVER');
+      await ref.read(authRepositoryProvider).sendOtp('+998$rawPhone', 'DRIVER');
       setState(() { _step = 2; _loading = false; });
     } catch (e) {
       setState(() { _error = AppStrings.get('generic_error', widget.locale); _loading = false; });
@@ -1229,8 +1231,18 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   }
 
   Future<void> _verifyOtp() async {
-    if (_otpCtrl.text.length < 6) return;
-    setState(() { _step = 3; });
+    if (_otpCtrl.text.length != 6) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+      await ref.read(authRepositoryProvider).verifyResetOtp('+998$rawPhone', _otpCtrl.text);
+      setState(() { _step = 3; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = AppStrings.get('otp_invalid_error', widget.locale);
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _setNewPassword() async {
@@ -1353,7 +1365,11 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                       child: TextField(
                         controller: _phoneCtrl,
                         keyboardType: TextInputType.number,
-                        enabled: false,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(9),
+                          _PhoneNumberFormatter(),
+                        ],
                         style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
                         decoration: const InputDecoration(
                           hintText: '77 014 77 03',
@@ -1380,7 +1396,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                 Text(AppStrings.get('enter_otp', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
                 const SizedBox(height: 8),
-                Text('+998${_phoneCtrl.text} ${AppStrings.get('otp_sent', locale)}',
+                Text('+998 ${_phoneCtrl.text} ${AppStrings.get('otp_sent', locale)}',
                     style: TextStyle(fontSize: 13, color: textSecondary)),
                 const SizedBox(height: 16),
                 TextField(
@@ -1397,8 +1413,30 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                   Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
                 ],
                 const SizedBox(height: 16),
-                _GradientButton(label: AppStrings.get('verify', locale),
-                    loading: _loading, onTap: _verifyOtp),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          side: BorderSide(color: border),
+                          foregroundColor: textSecondary,
+                        ),
+                        child: Text(AppStrings.get('cancel', locale),
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _GradientButton(label: AppStrings.get('verify', locale),
+                          loading: _loading,
+                          onTap: _otpCtrl.text.length == 6 ? _verifyOtp : null),
+                    ),
+                  ],
+                ),
               ],
               if (_step == 3) ...[
                 Text(AppStrings.get('set_new_password', locale),
