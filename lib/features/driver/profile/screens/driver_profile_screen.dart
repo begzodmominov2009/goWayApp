@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1453,6 +1454,7 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
   void initState() {
     super.initState();
     _currentPhoneCtrl.text = widget.currentPhone.replaceFirst('+998', '').replaceAll(RegExp(r'\D'), '');
+    _phoneCtrl.addListener(() => setState(() {}));
   }
 
   @override
@@ -1463,14 +1465,29 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
     super.dispose();
   }
 
+  String _extractErrorMessage(Object e, String locale) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['message'] is String) {
+        return data['message'] as String;
+      }
+    }
+    return AppStrings.get('generic_error', locale);
+  }
+
   Future<void> _requestChange() async {
+    final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+    if (rawPhone.length != 9) {
+      setState(() => _error = AppStrings.get('phone_incomplete_error', widget.locale));
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
-      await ref.read(authRepositoryProvider).requestPhoneChange('+998${_phoneCtrl.text.trim()}');
+      await ref.read(authRepositoryProvider).requestPhoneChange('+998$rawPhone');
       setState(() { _step = 1; _loading = false; });
     } catch (e) {
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _error = _extractErrorMessage(e, widget.locale);
         _loading = false;
       });
     }
@@ -1480,11 +1497,12 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
     if (_otpCtrl.text.length < 6) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await ref.read(authRepositoryProvider).verifyPhoneChange('+998${_phoneCtrl.text.trim()}', _otpCtrl.text);
+      final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+      await ref.read(authRepositoryProvider).verifyPhoneChange('+998$rawPhone', _otpCtrl.text);
       setState(() { _success = true; _loading = false; });
     } catch (e) {
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _error = _extractErrorMessage(e, widget.locale);
         _loading = false;
       });
     }
@@ -1498,6 +1516,7 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final hasNewPhone = _phoneCtrl.text.replaceAll(' ', '').isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: surface,
@@ -1526,7 +1545,7 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
                   decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
               if (_step == -1) ...[
-                Text(AppStrings.get('change_phone', locale),
+                Text(AppStrings.get('connected_phone_title', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
                 const SizedBox(height: 16),
                 Text(AppStrings.get('current_phone_number', locale),
@@ -1566,8 +1585,17 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
                   ]),
                 ),
                 const SizedBox(height: 16),
-                _GradientButton(label: AppStrings.get('change_phone_button', locale),
-                    onTap: () => setState(() => _step = 0)),
+                _GradientButton(label: AppStrings.get('close', locale),
+                    onTap: () => Navigator.pop(context)),
+                const SizedBox(height: 12),
+                Center(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _step = 0),
+                    child: Text(AppStrings.get('change_phone_button', locale),
+                        style: const TextStyle(color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.w600, fontSize: 13)),
+                  ),
+                ),
               ],
               if (_step == 0) ...[
                 Text(AppStrings.get('change_phone', locale),
@@ -1596,6 +1624,11 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
                       child: TextField(
                         controller: _phoneCtrl,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(9),
+                          _PhoneNumberFormatter(),
+                        ],
                         style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
                         decoration: InputDecoration(
                           hintText: AppStrings.get('enter_new_phone_hint', locale),
@@ -1614,15 +1647,18 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
                   Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
                 ],
                 const SizedBox(height: 16),
-                _GradientButton(label: AppStrings.get('submit_label', locale),
-                    loading: _loading, onTap: _requestChange),
+                hasNewPhone
+                    ? _GradientButton(label: AppStrings.get('submit_label', locale),
+                        loading: _loading, onTap: _requestChange)
+                    : _GradientButton(label: AppStrings.get('close', locale),
+                        onTap: () => setState(() => _step = -1)),
               ],
               if (_step == 1) ...[
                 Text(AppStrings.get('enter_otp', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
                 const SizedBox(height: 8),
                 Text(AppStrings.get('phone_change_otp_sent', locale)
-                        .replaceAll('{phone}', '+998${_phoneCtrl.text.trim()}'),
+                        .replaceAll('{phone}', '+998 ${_phoneCtrl.text}'),
                     style: TextStyle(fontSize: 13, color: textSecondary)),
                 const SizedBox(height: 16),
                 TextField(
@@ -1641,8 +1677,35 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
                 const SizedBox(height: 16),
                 _GradientButton(label: AppStrings.get('verify', locale),
                     loading: _loading, onTap: _verifyChange),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => setState(() { _step = 0; _otpCtrl.clear(); _error = null; }),
+                  child: Text(AppStrings.get('resend_code', locale),
+                      style: const TextStyle(color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
               ],
             ]),
+    );
+  }
+}
+
+class _PhoneNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if (i == 1 || i == 4 || i == 6) {
+        if (i != digits.length - 1) buffer.write(' ');
+      }
+    }
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
