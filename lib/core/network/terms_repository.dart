@@ -10,8 +10,8 @@ class TermsRepository {
   final Dio _dio;
   TermsRepository(this._dio);
 
-  Future<Map<String, dynamic>> getActiveTerms() async {
-    final res = await _dio.get('/terms');
+  Future<Map<String, dynamic>> getActiveTerms(String locale) async {
+    final res = await _dio.get('/terms', queryParameters: {'locale': locale});
     return Map<String, dynamic>.from(res.data['data']);
   }
 }

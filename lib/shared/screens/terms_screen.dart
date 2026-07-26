@@ -28,7 +28,8 @@ class _TermsScreenState extends ConsumerState<TermsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final terms = await ref.read(termsRepositoryProvider).getActiveTerms();
+      final locale = ref.read(localeProvider).languageCode;
+      final terms = await ref.read(termsRepositoryProvider).getActiveTerms(locale);
       setState(() { _terms = terms; _loading = false; });
     } catch (_) {
       setState(() { _loading = false; _error = 'Shartlar topilmadi'; });

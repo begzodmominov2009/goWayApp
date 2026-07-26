@@ -385,6 +385,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                     _MenuItem(icon: Icons.phone_iphone_outlined,
                         iconColor: textSecondary,
                         label: AppStrings.get('change_phone', locale),
+                        value: _profile?['user']?['phone'] ?? '',
                         isDark: isDark, onTap: _showChangePhoneSheet),
                     Divider(height: 8, color: border, indent: 68),
                     _MenuItem(icon: Icons.description_outlined,
@@ -461,6 +462,8 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.read(localeProvider).languageCode;
     final ctrl = TextEditingController(text: _profile?['fullName'] ?? '');
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -469,6 +472,8 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         bool saving = false;
+        final originalName = _profile?['fullName'] ?? '';
+        bool hasChanged = false;
         return StatefulBuilder(
           builder: (ctx, setSt) => Padding(
             padding: EdgeInsets.only(left: 20, right: 20, top: 20,
@@ -489,27 +494,40 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                   controller: ctrl,
                   style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
                   decoration: InputDecoration(labelText: AppStrings.get('full_name', locale)),
+                  onChanged: (val) => setSt(() => hasChanged = val.trim() != originalName.trim()),
                 ),
                 const SizedBox(height: 16),
-                _GradientButton(
-                  loading: saving,
-                  label: AppStrings.get('save', locale),
-                  onTap: () async {
-                    setSt(() => saving = true);
-                    try {
-                      await ref.read(driverRepositoryProvider).updateProfile(
-                        fullName: ctrl.text.trim(),
-                        truckType: _profile?['truckType'] ?? 'BONGO',
-                        plateNumber: _profile?['plateNumber'] ?? '',
-                        capacity: (_profile?['capacity'] as num?)?.toDouble() ?? 1.5,
-                      );
-                      await _load();
-                      if (mounted) Navigator.pop(ctx);
-                    } catch (_) {
-                      setSt(() => saving = false);
-                    }
-                  },
-                ),
+                hasChanged
+                    ? _GradientButton(
+                        loading: saving,
+                        label: AppStrings.get('save', locale),
+                        onTap: () async {
+                          setSt(() => saving = true);
+                          try {
+                            await ref.read(driverRepositoryProvider).updateProfile(
+                              fullName: ctrl.text.trim(),
+                              truckType: _profile?['truckType'] ?? 'BONGO',
+                              plateNumber: _profile?['plateNumber'] ?? '',
+                              capacity: (_profile?['capacity'] as num?)?.toDouble() ?? 1.5,
+                            );
+                            await _load();
+                            if (mounted) Navigator.pop(ctx);
+                          } catch (_) {
+                            setSt(() => saving = false);
+                          }
+                        },
+                      )
+                    : OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          side: BorderSide(color: border),
+                          foregroundColor: textSecondary,
+                        ),
+                        child: Text(AppStrings.get('close', locale),
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
               ],
             ),
           ),
@@ -526,7 +544,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) => _ChangePasswordSheet(isDark: isDark, locale: locale),
+      builder: (ctx) => _ChangePasswordSheet(
+        isDark: isDark, locale: locale,
+        driverPhone: _profile?['user']?['phone'] ?? '',
+      ),
     );
   }
 
@@ -538,7 +559,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) => _ChangePhoneSheet(isDark: isDark, locale: locale, onDone: _load),
+      builder: (ctx) => _ChangePhoneSheet(
+        isDark: isDark, locale: locale, onDone: _load,
+        currentPhone: _profile?['user']?['phone'] ?? '',
+      ),
     );
   }
 
@@ -1132,7 +1156,8 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
 class _ChangePasswordSheet extends ConsumerStatefulWidget {
   final bool isDark;
   final String locale;
-  const _ChangePasswordSheet({required this.isDark, required this.locale});
+  final String driverPhone;
+  const _ChangePasswordSheet({required this.isDark, required this.locale, required this.driverPhone});
   @override
   ConsumerState<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
 }
@@ -1150,6 +1175,12 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   bool _obscureConfirm = true;
   String? _error;
   bool _success = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneCtrl.text = widget.driverPhone.replaceFirst('+998', '').replaceAll(RegExp(r'\D'), '');
+  }
 
   @override
   void dispose() {
@@ -1184,7 +1215,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
 
   Future<void> _sendForgotOtp() async {
     if (_phoneCtrl.text.length < 9) {
-      setState(() => _error = 'Telefon raqamni to\'liq kiriting');
+      setState(() => _error = AppStrings.get('phone_incomplete_error', widget.locale));
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -1192,7 +1223,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
       await ref.read(authRepositoryProvider).sendOtp('+998${_phoneCtrl.text.trim()}', 'DRIVER');
       setState(() { _step = 2; _loading = false; });
     } catch (e) {
-      setState(() { _error = 'Xatolik yuz berdi'; _loading = false; });
+      setState(() { _error = AppStrings.get('generic_error', widget.locale); _loading = false; });
     }
   }
 
@@ -1298,7 +1329,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                 Text(AppStrings.get('reset_password', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
                 const SizedBox(height: 8),
-                Text('Telefon raqamingizni kiriting, OTP yuboramiz',
+                Text(AppStrings.get('reset_password_phone_prompt', locale),
                     style: TextStyle(fontSize: 13, color: textSecondary)),
                 const SizedBox(height: 16),
                 Container(
@@ -1321,10 +1352,15 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                       child: TextField(
                         controller: _phoneCtrl,
                         keyboardType: TextInputType.number,
+                        enabled: false,
                         style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
                         decoration: const InputDecoration(
                           hintText: '77 014 77 03',
+                          filled: false,
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
                         ),
                       ),
@@ -1368,7 +1404,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
                 const SizedBox(height: 8),
                 Text(
-                  'Muhim: yuboribgan OTP kodni endi tasdiqlab, yangi parolni saqlaymiz.',
+                  AppStrings.get('reset_password_otp_note', locale),
                   style: TextStyle(fontSize: 12, color: textSecondary),
                 ),
                 const SizedBox(height: 16),
@@ -1398,23 +1434,32 @@ class _ChangePhoneSheet extends ConsumerStatefulWidget {
   final bool isDark;
   final String locale;
   final VoidCallback onDone;
-  const _ChangePhoneSheet({required this.isDark, required this.locale, required this.onDone});
+  final String currentPhone;
+  const _ChangePhoneSheet({required this.isDark, required this.locale, required this.onDone, required this.currentPhone});
   @override
   ConsumerState<_ChangePhoneSheet> createState() => _ChangePhoneSheetState();
 }
 
 class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
-  int _step = 0;
+  int _step = -1;
   final _phoneCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
+  final _currentPhoneCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
   bool _success = false;
 
   @override
+  void initState() {
+    super.initState();
+    _currentPhoneCtrl.text = widget.currentPhone.replaceFirst('+998', '').replaceAll(RegExp(r'\D'), '');
+  }
+
+  @override
   void dispose() {
     _phoneCtrl.dispose();
     _otpCtrl.dispose();
+    _currentPhoneCtrl.dispose();
     super.dispose();
   }
 
@@ -1480,6 +1525,50 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
               Center(child: Container(width: 36, height: 4,
                   decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
+              if (_step == -1) ...[
+                Text(AppStrings.get('change_phone', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 16),
+                Text(AppStrings.get('current_phone_number', locale),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                      decoration: BoxDecoration(border: Border(right: BorderSide(color: border))),
+                      child: const Row(children: [
+                        Text('🇺🇿', style: TextStyle(fontSize: 20)),
+                        SizedBox(width: 6),
+                        Text('+998', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _currentPhoneCtrl,
+                        enabled: false,
+                        style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
+                        decoration: const InputDecoration(
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('change_phone_button', locale),
+                    onTap: () => setState(() => _step = 0)),
+              ],
               if (_step == 0) ...[
                 Text(AppStrings.get('change_phone', locale),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),

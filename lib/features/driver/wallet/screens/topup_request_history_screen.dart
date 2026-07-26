@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/providers/driver_cache_providers.dart';
+import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/locale_provider.dart';
 
 enum _TopupFilter { all, pending, approved, rejected }
 
@@ -57,27 +59,28 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
     }
   }
 
-  String _statusText(String status) {
+  String _statusText(String status, String locale) {
     switch (status) {
-      case 'PENDING': return 'Kutilmoqda';
-      case 'APPROVED': return 'Tasdiqlangan';
-      case 'REJECTED': return 'Rad etilgan';
+      case 'PENDING': return AppStrings.get('topup_status_pending', locale);
+      case 'APPROVED': return AppStrings.get('topup_status_approved', locale);
+      case 'REJECTED': return AppStrings.get('topup_status_rejected', locale);
       default: return status;
     }
   }
 
-  String _formatDateTime(String? dateStr) {
+  String _formatDateTime(String? dateStr, String locale) {
     if (dateStr == null) return '';
     final date = DateTime.tryParse(dateStr)?.toLocal();
     if (date == null) return '';
-    const months = ['yan', 'fev', 'mar', 'apr', 'may', 'iyun', 'iyul', 'avg', 'sen', 'okt', 'noy', 'dek'];
+    final month = AppStrings.get('month_short_${date.month.toString().padLeft(2, '0')}', locale);
     final h = date.hour.toString().padLeft(2, '0');
     final m = date.minute.toString().padLeft(2, '0');
-    return '${date.day} ${months[date.month - 1]} ${date.year}, $h:$m';
+    return '${date.day} $month ${date.year}, $h:$m';
   }
 
   void _showDetail(Map<String, dynamic> req) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.read(localeProvider).languageCode;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
@@ -102,15 +105,15 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(color: _statusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(_statusText(status), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor(status))),
+                child: Text(_statusText(status, locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor(status))),
               ),
               const Spacer(),
               Text('${req['amount']} so\'m', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary)),
             ]),
             const SizedBox(height: 14),
-            _DetailRow(label: 'So\'rov sanasi', value: _formatDateTime(req['createdAt'] as String?), textPrimary: textPrimary, textSecondary: textSecondary),
+            _DetailRow(label: AppStrings.get('topup_request_date', locale), value: _formatDateTime(req['createdAt'] as String?, locale), textPrimary: textPrimary, textSecondary: textSecondary),
             if (req['approvedAmount'] != null)
-              _DetailRow(label: 'Tasdiqlangan summa', value: '${req['approvedAmount']} so\'m', textPrimary: textPrimary, textSecondary: textSecondary),
+              _DetailRow(label: AppStrings.get('topup_approved_amount', locale), value: '${req['approvedAmount']} so\'m', textPrimary: textPrimary, textSecondary: textSecondary),
             if (status == 'REJECTED' && req['adminNote'] != null) ...[
               const SizedBox(height: 14),
               Container(
@@ -126,7 +129,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
                     Row(children: [
                       const Icon(Icons.info_outline, size: 15, color: AppTheme.errorColor),
                       const SizedBox(width: 6),
-                      Text('Rad etilish sababi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.errorColor)),
+                      Text(AppStrings.get('topup_rejection_reason', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.errorColor)),
                     ]),
                     const SizedBox(height: 6),
                     Text(req['adminNote'] as String, style: TextStyle(fontSize: 13, color: textPrimary, height: 1.4)),
@@ -136,7 +139,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
             ],
             if (req['receiptUrl'] != null) ...[
               const SizedBox(height: 14),
-              Text('Yuklangan chek', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+              Text(AppStrings.get('topup_receipt_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
               const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -152,6 +155,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
@@ -169,7 +173,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
           icon: Icon(Icons.arrow_back_ios, color: textPrimary, size: 20),
           onPressed: () => context.pop(),
         ),
-        title: Text('So\'rovlarim tarixi',
+        title: Text(AppStrings.get('topup_history_title', locale),
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,
       ),
@@ -179,13 +183,13 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Expanded(child: _FilterBtn(label: 'Barchasi', selected: _filter == _TopupFilter.all, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.all))),
+                Expanded(child: _FilterBtn(label: AppStrings.get('topup_filter_all', locale), selected: _filter == _TopupFilter.all, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.all))),
                 const SizedBox(width: 8),
-                Expanded(child: _FilterBtn(label: 'Kutilmoqda', selected: _filter == _TopupFilter.pending, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.pending))),
+                Expanded(child: _FilterBtn(label: AppStrings.get('topup_status_pending', locale), selected: _filter == _TopupFilter.pending, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.pending))),
                 const SizedBox(width: 8),
-                Expanded(child: _FilterBtn(label: 'Tasdiqlangan', selected: _filter == _TopupFilter.approved, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.approved))),
+                Expanded(child: _FilterBtn(label: AppStrings.get('topup_status_approved', locale), selected: _filter == _TopupFilter.approved, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.approved))),
                 const SizedBox(width: 8),
-                Expanded(child: _FilterBtn(label: 'Rad etilgan', selected: _filter == _TopupFilter.rejected, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.rejected))),
+                Expanded(child: _FilterBtn(label: AppStrings.get('topup_status_rejected', locale), selected: _filter == _TopupFilter.rejected, isDark: isDark, onTap: () => setState(() => _filter = _TopupFilter.rejected))),
               ],
             ),
           ),
@@ -193,7 +197,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
             child: loading
                 ? const Center(child: AppLoadingIndicator())
                 : _filtered.isEmpty
-                    ? Center(child: Text('So\'rovlar topilmadi', style: TextStyle(color: textSecondary)))
+                    ? Center(child: Text(AppStrings.get('topup_no_requests_found', locale), style: TextStyle(color: textSecondary)))
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView.separated(
@@ -232,7 +236,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
                                           Text('${req['amount']} so\'m',
                                               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
                                           const SizedBox(height: 3),
-                                          Text(_formatDateTime(req['createdAt'] as String?),
+                                          Text(_formatDateTime(req['createdAt'] as String?, locale),
                                               style: TextStyle(fontSize: 11, color: textSecondary)),
                                         ],
                                       ),
@@ -240,7 +244,7 @@ class _TopupRequestHistoryScreenState extends ConsumerState<TopupRequestHistoryS
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(color: _statusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                                      child: Text(_statusText(status),
+                                      child: Text(_statusText(status, locale),
                                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _statusColor(status))),
                                     ),
                                   ],

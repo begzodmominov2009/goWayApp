@@ -1032,48 +1032,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: surface,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 22, height: 22,
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.route_rounded, color: Colors.white, size: 13),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text('GoWay',
-                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                  ],
-                                ),
-                                if (_currentAddressLabel.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _currentAddressLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 12, color: textSecondary),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
+                        const Spacer(),
                         GestureDetector(
                           onTap: _toggleOnline,
                           child: _StatusBadge(isOnline: _isOnline, loading: _onlineLoading, locale: locale),
