@@ -59,6 +59,16 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   void initState() {
     super.initState();
     ref.read(clientTrucksCacheProvider.notifier).refreshIfStale();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _preloadTruckImages());
+  }
+
+  Future<void> _preloadTruckImages() async {
+    for (final t in _uniqueTrucks) {
+      final url = t['imageUrl'] as String?;
+      if (url != null && url.isNotEmpty && mounted) {
+        precacheImage(NetworkImage(url), context).catchError((_) {});
+      }
+    }
   }
 
   @override
@@ -147,9 +157,20 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
   Future<void> _submit() async {
     final locale = ref.read(localeProvider).languageCode;
-    if (_selectedTruck == null) return;
+    if (_selectedTruck == null) {
+      setState(() => _error = AppStrings.get('select_truck_error', locale));
+      return;
+    }
     if (_selectedWeight == null) {
       setState(() => _error = AppStrings.get('enter_weight_error', locale));
+      return;
+    }
+    if (_cargoTypeCtrl.text.trim().isEmpty) {
+      setState(() => _error = AppStrings.get('enter_cargo_type_error', locale));
+      return;
+    }
+    if (_isScheduled && (_selectedHour == null || _selectedMinute == null)) {
+      setState(() => _error = AppStrings.get('select_time_error', locale));
       return;
     }
 
@@ -394,31 +415,45 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
                     Text(AppStrings.get('weight_tons', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
                     const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: _showWeightPicker,
-                      child: Container(
-                        width: double.infinity,
-                        height: 50,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: bg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: border),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _selectedWeight != null
-                                  ? '${_selectedWeight!.toStringAsFixed(1)} t'
-                                  : AppStrings.get('select_weight_hint', locale),
-                              style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600,
-                                color: _selectedWeight != null ? textPrimary : textSecondary,
+                    Opacity(
+                      opacity: _selectedTruck == null ? 0.6 : 1.0,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_selectedTruck == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(AppStrings.get('select_truck_first_warning', locale)),
+                                backgroundColor: AppTheme.warningColor,
                               ),
-                            ),
-                            Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
-                          ],
+                            );
+                            return;
+                          }
+                          _showWeightPicker();
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: 50,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _selectedWeight != null
+                                    ? '${_selectedWeight!.toStringAsFixed(1)} t'
+                                    : AppStrings.get('select_weight_hint', locale),
+                                style: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600,
+                                  color: _selectedWeight != null ? textPrimary : textSecondary,
+                                ),
+                              ),
+                              Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -550,9 +585,11 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     final truck = _uniqueTrucks.firstWhere(
         (t) => t['type'] == _selectedTruck, orElse: () => {});
     final capacity = (truck['capacity'] as num?)?.toDouble() ?? 2.0;
-    final step = capacity / 20;
-    return List.generate(
-        20, (i) => double.parse(((i + 1) * step).toStringAsFixed(2)));
+    final count = (capacity / 0.1).round();
+    return List.generate(count, (i) {
+      final raw = (i + 1) * 0.1;
+      return (raw * 10).round() / 10; // floating-point xatosini oldini olish
+    });
   }
 }
 
@@ -619,7 +656,7 @@ class _TruckThumbnail extends StatelessWidget {
       child: Image.network(
         imageUrl!,
         width: size, height: size,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );
@@ -712,13 +749,13 @@ class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
                                 )
                               : null,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
                         _TruckThumbnail(
                           imageUrl: t['imageUrl'] as String?,
                           size: 48, radius: 12,
                           bg: bg, iconColor: textSecondary,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -974,6 +1011,13 @@ class _TimePickerSheetState extends ConsumerState<_TimePickerSheet> {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      ':',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: textPrimary),
                     ),
                   ),
                   Expanded(
