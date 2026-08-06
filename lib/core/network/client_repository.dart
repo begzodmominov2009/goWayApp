@@ -90,6 +90,26 @@ class ClientRepository {
     }
   }
 
+  // Buyurtma yaratishdan oldin taxminiy narxni hisoblash
+  Future<double?> calculatePrice({
+    required String truckType,
+    required double distance,
+    required double weight,
+    String priority = 'STANDARD',
+  }) async {
+    try {
+      final res = await _dio.get('/orders/calculate-price', queryParameters: {
+        'truckType': truckType,
+        'distance': distance.toString(),
+        'weight': weight.toString(),
+        'priority': priority,
+      });
+      return (res.data['data']['price'] as num).toDouble();
+    } catch (_) {
+      return null;
+    }
+  }
+
   OrderCreationException _mapOrderError(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:

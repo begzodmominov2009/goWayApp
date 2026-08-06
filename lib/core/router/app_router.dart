@@ -248,8 +248,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             OrderDetailsScreen(
               fromPlace: extra['fromPlace'] as Place,
               toPlace: extra['toPlace'] as Place,
-              isScheduled: extra['isScheduled'] as bool? ?? false,
-              scheduledFor: extra['scheduledFor'] as DateTime?,
+              distKm: extra['distKm'] as double?,
+              timeMin: extra['timeMin'] as int?,
             ),
             state,
           );
