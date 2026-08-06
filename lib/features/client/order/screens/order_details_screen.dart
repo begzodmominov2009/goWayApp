@@ -2,11 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
+import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
@@ -49,6 +52,12 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   bool _priceLoading = false;
   Timer? _priceDebounce;
 
+  late Place _currentFromPlace;
+  late Place _currentToPlace;
+  double? _currentDistKm;
+  int? _currentTimeMin;
+  bool _routeLoading = false;
+
   // Mashina turlari endi keshdan (clientTrucksCacheProvider) o'qiladi.
   List<Map<String, dynamic>> get _trucks =>
       ref.read(clientTrucksCacheProvider).valueOrNull ?? const [];
@@ -58,6 +67,10 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    _currentFromPlace = widget.fromPlace;
+    _currentToPlace = widget.toPlace;
+    _currentDistKm = widget.distKm;
+    _currentTimeMin = widget.timeMin;
     ref.read(clientTrucksCacheProvider.notifier).refreshIfStale();
     WidgetsBinding.instance.addPostFrameCallback((_) => _preloadTruckImages());
   }
@@ -106,6 +119,41 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       _selectedHour ??= (now.hour + 1) % 24;
       _selectedMinute ??= 0;
     });
+  }
+
+  Future<void> _editAddresses() async {
+    final result = await context.push<Map<String, Place>>(
+      AppRoutes.clientSelectAddress,
+      extra: {
+        'initialFrom': _currentFromPlace,
+        'initialTo': _currentToPlace,
+        'fromLat': _currentFromPlace.lat,
+        'fromLng': _currentFromPlace.lng,
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _currentFromPlace = result['from']!;
+      _currentToPlace = result['to']!;
+      _calculatedPrice = null;
+    });
+    await _recalculateRoute();
+  }
+
+  Future<void> _recalculateRoute() async {
+    setState(() => _routeLoading = true);
+    final repo = ref.read(geocodeRepositoryProvider);
+    final route = await repo.getRoute(
+      fromLat: _currentFromPlace.lat, fromLng: _currentFromPlace.lng,
+      toLat: _currentToPlace.lat, toLng: _currentToPlace.lng,
+    );
+    if (!mounted) return;
+    setState(() {
+      _currentDistKm = route?.distanceKm;
+      _currentTimeMin = route?.durationMin;
+      _routeLoading = false;
+    });
+    _recalculatePrice();
   }
 
   Future<void> _showTruckPicker() async {
@@ -190,14 +238,14 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final created = await ref.read(clientRepositoryProvider).createOrder(
-        fromCity: widget.fromPlace.name,
-        fromAddress: widget.fromPlace.address,
-        toCity: widget.toPlace.name,
-        toAddress: widget.toPlace.address,
-        fromLatitude: widget.fromPlace.lat,
-        fromLongitude: widget.fromPlace.lng,
-        toLatitude: widget.toPlace.lat,
-        toLongitude: widget.toPlace.lng,
+        fromCity: _currentFromPlace.name,
+        fromAddress: _currentFromPlace.address,
+        toCity: _currentToPlace.name,
+        toAddress: _currentToPlace.address,
+        fromLatitude: _currentFromPlace.lat,
+        fromLongitude: _currentFromPlace.lng,
+        toLatitude: _currentToPlace.lat,
+        toLongitude: _currentToPlace.lng,
         truckType: _selectedTruck!,
         weight: _selectedWeight!,
         cargoType: _cargoTypeCtrl.text.trim().isEmpty ? null : _cargoTypeCtrl.text.trim(),
@@ -297,7 +345,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                 children: [
                   IconButton(
                     icon: Icon(Icons.arrow_back_ios, color: textPrimary, size: 20),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _editAddresses,
                   ),
                   Text(
                     AppStrings.get('order_details_page_title', locale),
@@ -322,52 +370,78 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                       Expanded(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(AddressHelper.shorten(widget.fromPlace.name),
+                          Text(AddressHelper.shorten(_currentFromPlace.name),
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 4),
-                          Text(AddressHelper.shorten(widget.toPlace.name),
+                          Text(AddressHelper.shorten(_currentToPlace.name),
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       )),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primaryColor),
+                        onPressed: _editAddresses,
+                      ),
                     ]),
                     const SizedBox(height: 18),
 
-                    if (widget.distKm != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: tabBg,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
-                          const SizedBox(width: 7),
-                          Text('${widget.distKm!.toStringAsFixed(1)} km',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                          if (widget.timeMin != null) ...[
-                            Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
-                            Icon(Icons.access_time, size: 14, color: textSecondary),
-                            const SizedBox(width: 5),
-                            Text(
-                              widget.timeMin! >= 60
-                                  ? '${widget.timeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${widget.timeMin! % 60}${AppStrings.get('route_time_min', locale)}'
-                                  : '${widget.timeMin} ${AppStrings.get('route_time_min', locale)}',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+                    _routeLoading
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2)),
                             ),
-                          ],
-                        ]),
-                      ),
+                          )
+                        : (_currentDistKm != null
+                            ? Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: tabBg,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                  const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
+                                  const SizedBox(width: 7),
+                                  Text('${_currentDistKm!.toStringAsFixed(1)} km',
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                                  if (_currentTimeMin != null) ...[
+                                    Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
+                                    Icon(Icons.access_time, size: 14, color: textSecondary),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      _currentTimeMin! >= 60
+                                          ? '${_currentTimeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${_currentTimeMin! % 60}${AppStrings.get('route_time_min', locale)}'
+                                          : '$_currentTimeMin ${AppStrings.get('route_time_min', locale)}',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+                                    ),
+                                  ],
+                                ]),
+                              )
+                            : const SizedBox.shrink()),
+                    if (!_routeLoading && _currentDistKm != null) ...[
                       const SizedBox(height: 6),
                       Text(AppStrings.get('auto_calculated_hint', locale),
                           style: TextStyle(fontSize: 11, color: textSecondary)),
                       const SizedBox(height: 14),
                     ],
 
-                    Text(AppStrings.get('select_vehicle', locale),
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
+                    Row(children: [
+                      Text(AppStrings.get('select_vehicle', locale),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(AppStrings.get('vehicle_help_text', locale))),
+                          );
+                        },
+                      ),
+                    ]),
                     const SizedBox(height: 10),
 
                     trucksLoading
@@ -413,7 +487,21 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                           ),
                     const SizedBox(height: 16),
 
-                    Text(AppStrings.get('weight_tons', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                    Row(children: [
+                      Text(AppStrings.get('weight_tons', locale),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(AppStrings.get('weight_help_text', locale))),
+                          );
+                        },
+                      ),
+                    ]),
                     const SizedBox(height: 8),
                     Opacity(
                       opacity: _selectedTruck == null ? 0.6 : 1.0,

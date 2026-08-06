@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -19,12 +21,14 @@ import '../../../../shared/widgets/map_address_picker.dart';
 /// ikkala manzil ham tanlanganda qaytariladi, aks holda null.
 class SelectAddressScreen extends ConsumerStatefulWidget {
   final Place? initialFrom;
+  final Place? initialTo;
   final double fromLat;
   final double fromLng;
 
   const SelectAddressScreen({
     super.key,
     required this.initialFrom,
+    this.initialTo,
     required this.fromLat,
     required this.fromLng,
   });
@@ -60,15 +64,18 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
   void initState() {
     super.initState();
     _fromPlace = widget.initialFrom;
+    _toPlace = widget.initialTo;
     _fromCtrl = TextEditingController(text: widget.initialFrom?.name ?? '');
-    _toCtrl = TextEditingController();
+    _toCtrl = TextEditingController(text: widget.initialTo?.name ?? '');
 
     _fromFocus.addListener(() => setState(() => _fromFocused = _fromFocus.hasFocus));
     _toFocus.addListener(() => setState(() => _toFocused = _toFocus.hasFocus));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FocusScope.of(context).requestFocus(_toFocus);
-    });
+    if (widget.initialTo == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FocusScope.of(context).requestFocus(_toFocus);
+      });
+    }
     // Tezkor tanlash ro'yxati — SavedAddressesScreen bilan bir xil keshni
     // ulashadi (clientSavedAddressesCacheProvider), shu sabab bu yerga
     // o'tilganda yangi so'rov ketmaydi.
@@ -467,30 +474,41 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
             else
               const Spacer(),
 
-            // Pastki tugma — bo'sh bo'lsa "Yopish", to'liq bo'lsa "Tasdiqlash"
+            // Pastki tugmalar — "Bekor qilish" doim ko'rinadi (Home'ga
+            // to'g'ridan-to'g'ri qaytaradi, hech narsa saqlanmasdan),
+            // "Manzil tasdiqlash" faqat ikkala manzil to'ldirilganda
+            // ko'rinadi.
             Container(
               padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
               decoration: BoxDecoration(
                 color: surface,
                 border: Border(top: BorderSide(color: border)),
               ),
-              child: _allFilled
-                  ? _GradBtn(
-                      label: AppStrings.get('confirm_address_btn', locale),
-                      onTap: () {
-                        Navigator.pop(context, {'from': _fromPlace!, 'to': _toPlace!});
-                      },
-                    )
-                  : OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        side: BorderSide(color: border),
-                        foregroundColor: textSecondary,
-                      ),
-                      child: Text(AppStrings.get('cancel_selection', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+              child: Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => context.go(AppRoutes.clientHome),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      side: BorderSide(color: border),
+                      foregroundColor: textSecondary,
                     ),
+                    child: Text(AppStrings.get('cancel_selection', locale),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                if (_allFilled) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: _GradBtn(
+                      label: AppStrings.get('confirm_address_btn', locale),
+                      onTap: () => Navigator.pop(context, {'from': _fromPlace!, 'to': _toPlace!}),
+                    ),
+                  ),
+                ],
+              ]),
             ),
           ],
         ),
