@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
@@ -95,6 +96,34 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       _selectedHour ??= (now.hour + 1) % 24;
       _selectedMinute ??= 0;
     });
+  }
+
+  Future<void> _showWeightPicker() async {
+    final result = await showModalBottomSheet<double>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _WeightPickerSheet(options: _weightOptions, initial: _selectedWeight),
+    );
+    if (result != null) {
+      setState(() => _selectedWeight = result);
+      _recalculatePrice();
+    }
+  }
+
+  Future<void> _showTimePicker() async {
+    final result = await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _TimePickerSheet(initialHour: _selectedHour, initialMinute: _selectedMinute),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedHour = result['hour'];
+        _selectedMinute = result['minute'];
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -350,41 +379,32 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
                     Text(AppStrings.get('weight_tons', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
                     const SizedBox(height: 8),
-                    SizedBox(
-                      height: 50,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _weightOptions.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (ctx2, i) {
-                          final w = _weightOptions[i];
-                          final selected = _selectedWeight == w;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() => _selectedWeight = w);
-                              _recalculatePrice();
-                            },
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              decoration: BoxDecoration(
-                                gradient: selected
-                                    ? const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)])
-                                    : null,
-                                color: selected ? null : bg,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: selected ? AppTheme.primaryColor : border, width: selected ? 2 : 1),
-                              ),
-                              child: Text(
-                                '${w.toStringAsFixed(1)} t',
-                                style: TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w700,
-                                  color: selected ? Colors.white : textPrimary,
-                                ),
+                    GestureDetector(
+                      onTap: _showWeightPicker,
+                      child: Container(
+                        width: double.infinity,
+                        height: 50,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: bg,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: border),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _selectedWeight != null
+                                  ? '${_selectedWeight!.toStringAsFixed(1)} t'
+                                  : AppStrings.get('select_weight_hint', locale),
+                              style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600,
+                                color: _selectedWeight != null ? textPrimary : textSecondary,
                               ),
                             ),
-                          );
-                        },
+                            Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -431,12 +451,33 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                     ]),
                     if (_isScheduled) ...[
                       const SizedBox(height: 14),
-                      _InlineTimeSelector(
-                        hour: _selectedHour ?? 0,
-                        minute: _selectedMinute ?? 0,
-                        bg: tabBg, textPrimary: textPrimary,
-                        onHourChanged: (h) => setState(() => _selectedHour = h),
-                        onMinuteChanged: (m) => setState(() => _selectedMinute = m),
+                      GestureDetector(
+                        onTap: _showTimePicker,
+                        child: Container(
+                          width: double.infinity,
+                          height: 50,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                (_selectedHour != null && _selectedMinute != null)
+                                    ? '${_selectedHour!.toString().padLeft(2, '0')}:${_selectedMinute!.toString().padLeft(2, '0')}'
+                                    : AppStrings.get('select_time_hint', locale),
+                                style: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600,
+                                  color: (_selectedHour != null && _selectedMinute != null) ? textPrimary : textSecondary,
+                                ),
+                              ),
+                              Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -535,106 +576,231 @@ class _TimeTab extends StatelessWidget {
   }
 }
 
-/// Soat/daqiqa tanlash — hour_minute_picker.dart dagi vizual naqshga
-/// o'xshab, lekin alohida modal emas, shu sahifaning ichida ko'rinadi.
-class _InlineTimeSelector extends StatelessWidget {
-  static const List<int> _allowedMinutes = [0, 15, 30, 45];
+/// Yuk og'irligini tanlash — Cupertino uslubidagi g'ildirak (wheel) picker,
+/// pastdan chiquvchi modal ichida.
+class _WeightPickerSheet extends ConsumerStatefulWidget {
+  final List<double> options;
+  final double? initial;
+  const _WeightPickerSheet({required this.options, this.initial});
 
-  final int hour;
-  final int minute;
-  final Color bg;
-  final Color textPrimary;
-  final ValueChanged<int> onHourChanged;
-  final ValueChanged<int> onMinuteChanged;
+  @override
+  ConsumerState<_WeightPickerSheet> createState() => _WeightPickerSheetState();
+}
 
-  const _InlineTimeSelector({
-    required this.hour,
-    required this.minute,
-    required this.bg,
-    required this.textPrimary,
-    required this.onHourChanged,
-    required this.onMinuteChanged,
-  });
+class _WeightPickerSheetState extends ConsumerState<_WeightPickerSheet> {
+  late final FixedExtentScrollController _scrollCtrl;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    final idx = widget.initial != null ? widget.options.indexOf(widget.initial!) : -1;
+    _index = idx >= 0 ? idx : 0;
+    _scrollCtrl = FixedExtentScrollController(initialItem: _index);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Center(
-          child: Text(
-            '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: textPrimary),
-          ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 40,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: 24,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (ctx, i) => _TimeChip(
-              label: i.toString().padLeft(2, '0'),
-              width: 42,
-              selected: i == hour,
-              bg: bg, textPrimary: textPrimary,
-              onTap: () => onHourChanged(i),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: _allowedMinutes.map((m) {
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: _TimeChip(
-                  label: m.toString().padLeft(2, '0'),
-                  selected: m == minute,
-                  bg: bg, textPrimary: textPrimary,
-                  onTap: () => onMinuteChanged(m),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(
+                  AppStrings.get('weight_tons', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
                 ),
               ),
-            );
-          }).toList(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Icon(Icons.close, color: textPrimary),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 180,
+              child: CupertinoPicker(
+                itemExtent: 40,
+                backgroundColor: Colors.transparent,
+                scrollController: _scrollCtrl,
+                onSelectedItemChanged: (i) => _index = i,
+                children: widget.options
+                    .map((w) => Center(
+                          child: Text(
+                            '${w.toStringAsFixed(1)} t',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => Navigator.pop(context, widget.options[_index]),
+              child: Container(
+                width: double.infinity, height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    AppStrings.get('apply', locale),
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _TimeChip extends StatelessWidget {
-  final String label;
-  final double? width;
-  final bool selected;
-  final Color bg;
-  final Color textPrimary;
-  final VoidCallback onTap;
+/// Vaqt (soat/daqiqa) tanlash — Cupertino uslubidagi g'ildirak (wheel)
+/// picker, pastdan chiquvchi modal ichida.
+class _TimePickerSheet extends ConsumerStatefulWidget {
+  final int? initialHour;
+  final int? initialMinute;
+  const _TimePickerSheet({this.initialHour, this.initialMinute});
 
-  const _TimeChip({
-    required this.label, this.width, required this.selected,
-    required this.bg, required this.textPrimary, required this.onTap,
-  });
+  @override
+  ConsumerState<_TimePickerSheet> createState() => _TimePickerSheetState();
+}
+
+class _TimePickerSheetState extends ConsumerState<_TimePickerSheet> {
+  late final FixedExtentScrollController _hourScrollCtrl;
+  late final FixedExtentScrollController _minuteScrollCtrl;
+  late int _hour;
+  late int _minute;
+
+  @override
+  void initState() {
+    super.initState();
+    _hour = widget.initialHour ?? 0;
+    final rawMinute = widget.initialMinute ?? 1;
+    _minute = rawMinute < 1 ? 1 : (rawMinute > 60 ? 60 : rawMinute);
+    _hourScrollCtrl = FixedExtentScrollController(initialItem: _hour);
+    _minuteScrollCtrl = FixedExtentScrollController(initialItem: _minute - 1);
+  }
+
+  @override
+  void dispose() {
+    _hourScrollCtrl.dispose();
+    _minuteScrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+
+    return SafeArea(
+      top: false,
       child: Container(
-        width: width,
-        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          gradient: selected
-              ? const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)])
-              : null,
-          color: selected ? null : bg,
-          borderRadius: BorderRadius.circular(12),
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : textPrimary),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(
+                  AppStrings.get('select_time_hint', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Icon(Icons.close, color: textPrimary),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 180,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CupertinoPicker(
+                      itemExtent: 40,
+                      backgroundColor: Colors.transparent,
+                      scrollController: _minuteScrollCtrl,
+                      onSelectedItemChanged: (i) => _minute = i + 1,
+                      children: List.generate(
+                        60,
+                        (i) => Center(
+                          child: Text(
+                            (i + 1).toString().padLeft(2, '0'),
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: CupertinoPicker(
+                      itemExtent: 40,
+                      backgroundColor: Colors.transparent,
+                      scrollController: _hourScrollCtrl,
+                      onSelectedItemChanged: (i) => _hour = i,
+                      children: List.generate(
+                        24,
+                        (i) => Center(
+                          child: Text(
+                            i.toString().padLeft(2, '0'),
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => Navigator.pop(context, {'hour': _hour, 'minute': _minute}),
+              child: Container(
+                width: double.infinity, height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    AppStrings.get('apply', locale),
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
