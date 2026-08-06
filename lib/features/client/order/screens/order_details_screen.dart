@@ -98,6 +98,25 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     });
   }
 
+  Future<void> _showTruckPicker() async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _TruckPickerSheet(
+        trucks: _uniqueTrucks, initialType: _selectedTruck,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedTruck = result;
+        _selectedWeight = null;
+        _calculatedPrice = null;
+      });
+      _recalculatePrice();
+    }
+  }
+
   Future<void> _showWeightPicker() async {
     final result = await showModalBottomSheet<double>(
       context: context,
@@ -242,6 +261,9 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
     final trucksAsync = ref.watch(clientTrucksCacheProvider);
     final trucksLoading = trucksAsync.isLoading && !trucksAsync.hasValue;
+    final selectedTruckData = _selectedTruck != null
+        ? _uniqueTrucks.firstWhere((t) => t['type'] == _selectedTruck, orElse: () => {})
+        : null;
 
     return Scaffold(
       backgroundColor: surface,
@@ -329,50 +351,43 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
                     trucksLoading
                         ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
-                        : SizedBox(
-                            height: 96,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _uniqueTrucks.length,
-                              separatorBuilder: (_, __) => const SizedBox(width: 10),
-                              itemBuilder: (ctx2, i) {
-                                final t = _uniqueTrucks[i];
-                                final selected = _selectedTruck == t['type'];
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedTruck = t['type'] as String;
-                                      _selectedWeight = null;
-                                      _calculatedPrice = null;
-                                    });
-                                    _recalculatePrice();
-                                  },
-                                  child: Container(
-                                    width: 108,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: selected ? AppTheme.primaryColor.withOpacity(0.1) : bg,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: selected ? AppTheme.primaryColor : border, width: selected ? 2 : 1),
+                        : GestureDetector(
+                            onTap: _showTruckPicker,
+                            child: Container(
+                              width: double.infinity,
+                              height: 50,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: bg,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: border),
+                              ),
+                              child: Row(
+                                children: [
+                                  if (selectedTruckData != null) ...[
+                                    _TruckThumbnail(
+                                      imageUrl: selectedTruckData['imageUrl'] as String?,
+                                      size: 32, radius: 10,
+                                      bg: bg, iconColor: textSecondary,
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.local_shipping,
-                                            size: 26, color: selected ? AppTheme.primaryColor : textSecondary),
-                                        const SizedBox(height: 8),
-                                        Text(t['name'] as String? ?? t['type'] as String,
-                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                                color: selected ? AppTheme.primaryColor : textPrimary),
-                                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                                        Text('${t['capacity']} t',
-                                            style: TextStyle(fontSize: 11, color: textSecondary)),
-                                      ],
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        selectedTruckData['name'] as String? ?? _selectedTruck!,
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  ] else
+                                    Expanded(
+                                      child: Text(
+                                        AppStrings.get('select_vehicle_hint', locale),
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary),
+                                      ),
+                                    ),
+                                  Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                                ],
+                              ),
                             ),
                           ),
                     const SizedBox(height: 16),
@@ -570,6 +585,204 @@ class _TimeTab extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : textPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Truck rasmi — agar `imageUrl` bo'lsa tarmoqdan yuklab ko'rsatadi
+/// (yuklanmasa yoki bo'lmasa, placeholder ikonkaga tushadi).
+class _TruckThumbnail extends StatelessWidget {
+  final String? imageUrl;
+  final double size;
+  final double radius;
+  final Color bg;
+  final Color iconColor;
+
+  const _TruckThumbnail({
+    required this.imageUrl, required this.size, required this.radius,
+    required this.bg, required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      width: size, height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(radius)),
+      child: Icon(Icons.local_shipping, size: size * 0.55, color: iconColor),
+    );
+    if (imageUrl == null || imageUrl!.isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.network(
+        imageUrl!,
+        width: size, height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => placeholder,
+      ),
+    );
+  }
+}
+
+/// Mashina turini tanlash — ro'yxat-modal (radio + rasm + nom + tavsif).
+class _TruckPickerSheet extends ConsumerStatefulWidget {
+  final List<Map<String, dynamic>> trucks;
+  final String? initialType;
+  const _TruckPickerSheet({required this.trucks, this.initialType});
+
+  @override
+  ConsumerState<_TruckPickerSheet> createState() => _TruckPickerSheetState();
+}
+
+class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
+  String? _tempSelected;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = widget.initialType;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  AppStrings.get('select_vehicle', locale),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Icon(Icons.close, color: textPrimary),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.trucks.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (ctx, i) {
+                  final t = widget.trucks[i];
+                  final selected = _tempSelected == t['type'];
+                  return GestureDetector(
+                    onTap: () => setState(() => _tempSelected = t['type'] as String),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 22, height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: selected ? AppTheme.primaryColor : Colors.transparent,
+                            border: Border.all(color: selected ? AppTheme.primaryColor : border, width: 2),
+                          ),
+                          child: selected
+                              ? Container(
+                                  width: 8, height: 8,
+                                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        _TruckThumbnail(
+                          imageUrl: t['imageUrl'] as String?,
+                          size: 48, radius: 12,
+                          bg: bg, iconColor: textSecondary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(t['name'] as String? ?? t['type'] as String,
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 2),
+                              Text('${t['capacity']} t',
+                                  style: TextStyle(fontSize: 12, color: textSecondary)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: border),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: Text(
+                        AppStrings.get('cancel', locale),
+                        style: TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: _tempSelected != null ? () => Navigator.pop(context, _tempSelected) : null,
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: _tempSelected != null
+                          ? const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight)
+                          : null,
+                      color: _tempSelected != null ? null : Colors.grey.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: Text(
+                        AppStrings.get('select_button', locale),
+                        style: TextStyle(color: _tempSelected != null ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ],
         ),
       ),
     );
