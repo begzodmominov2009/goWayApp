@@ -34,6 +34,9 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
   List<Map<String, dynamic>> _trucks = [];
   bool _trucksLoading = true;
 
+  // Yuklash turi: 'BACK', 'TOP', 'BOTH' yoki null (tanlanmagan)
+  String? _loadType;
+
   // Fayl nomi (UI uchun null check)
   String? _passportUrl;
   String? _licenceFrontUrl;
@@ -161,6 +164,8 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
         truckType: _selectedTruckType!,
         plateNumber: _getBackendPlate(),
         capacity: (selectedTruck['capacity'] as num).toDouble(),
+        loadFromBack: _loadType == 'BACK' || _loadType == 'BOTH',
+        loadFromTop: _loadType == 'TOP' || _loadType == 'BOTH',
       );
 
       // 2. Hujjatlar yuborish
@@ -328,7 +333,39 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
               validator: (v) =>
                   v == null || v.isEmpty ? 'Davlat raqamini kiriting' : null,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+
+            // Load type
+            _Label(
+                text: AppStrings.get('load_type_label', locale),
+                isDark: isDark),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                  child: _LoadTypeChip(
+                label: AppStrings.get('load_from_back', locale),
+                selected: _loadType == 'BACK',
+                isDark: isDark,
+                onTap: () => setState(() => _loadType = 'BACK'),
+              )),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _LoadTypeChip(
+                label: AppStrings.get('load_from_top', locale),
+                selected: _loadType == 'TOP',
+                isDark: isDark,
+                onTap: () => setState(() => _loadType = 'TOP'),
+              )),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _LoadTypeChip(
+                label: AppStrings.get('load_both', locale),
+                selected: _loadType == 'BOTH',
+                isDark: isDark,
+                onTap: () => setState(() => _loadType = 'BOTH'),
+              )),
+            ]),
+            const SizedBox(height: 20),
 
             // Documents
             _Label(text: 'Hujjatlar', isDark: isDark),
@@ -589,6 +626,53 @@ class _DocumentPicker extends StatelessWidget {
                 size: 22,
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadTypeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isDark;
+  final VoidCallback onTap;
+  const _LoadTypeChip({
+    required this.label,
+    required this.selected,
+    required this.isDark,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary =
+        isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(colors: [
+                  Color(0xFF0f172a),
+                  Color(0xFF1e3a8a),
+                  Color(0xFF3b82f6),
+                ])
+              : null,
+          color: selected ? null : bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? Colors.transparent : border),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : textPrimary,
+          ),
         ),
       ),
     );

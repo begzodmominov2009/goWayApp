@@ -49,12 +49,16 @@ class DriverRepository {
     required String truckType,
     required String plateNumber,
     required double capacity,
+    bool? loadFromBack,
+    bool? loadFromTop,
   }) async {
     await _dio.put('/driver/profile', data: {
       'fullName': fullName,
       'truckType': truckType.toUpperCase().replaceAll(' ', '_'),
       'plateNumber': plateNumber,
       'capacity': capacity,
+      if (loadFromBack != null) 'loadFromBack': loadFromBack,
+      if (loadFromTop != null) 'loadFromTop': loadFromTop,
     });
   }
 

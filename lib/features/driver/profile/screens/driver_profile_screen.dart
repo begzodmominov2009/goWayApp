@@ -774,6 +774,8 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
   late TextEditingController _plateCtrl;
   late String? _origTruckType;
   late String _origPlate;
+  late String? _loadType;
+  late String? _origLoadType;
   Map<String, Uint8List> _newBytes = {};
   Map<String, String> _newNames = {};
   bool _hasChanges = false;
@@ -788,6 +790,13 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
     _origPlate = widget.profile?['plateNumber'] ?? '';
     _plateCtrl = TextEditingController(text: _origPlate);
     _plateCtrl.addListener(_checkChanges);
+    _loadType = (widget.profile?['loadFromBack'] == true &&
+            widget.profile?['loadFromTop'] == true)
+        ? 'BOTH'
+        : (widget.profile?['loadFromBack'] == true
+            ? 'BACK'
+            : (widget.profile?['loadFromTop'] == true ? 'TOP' : null));
+    _origLoadType = _loadType;
   }
 
   @override
@@ -799,7 +808,8 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
   void _checkChanges() {
     final changed = _truckType != _origTruckType ||
         _plateCtrl.text.trim() != _origPlate ||
-        _newBytes.isNotEmpty;
+        _newBytes.isNotEmpty ||
+        _loadType != _origLoadType;
     if (changed != _hasChanges) setState(() => _hasChanges = changed);
   }
 
@@ -846,7 +856,8 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
     setState(() => _saving = true);
     try {
       final repo = ref.read(driverRepositoryProvider);
-      if (_truckType != _origTruckType && _newBytes.isEmpty &&
+      final loadTypeChanged = _loadType != _origLoadType;
+      if ((_truckType != _origTruckType || loadTypeChanged) && _newBytes.isEmpty &&
           _plateCtrl.text.trim() == _origPlate) {
         final truck = widget.trucks.firstWhere(
           (t) => t['type'] == _truckType, orElse: () => widget.profile ?? {});
@@ -855,6 +866,8 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
           truckType: _truckType ?? _origTruckType ?? '',
           plateNumber: _origPlate,
           capacity: (truck['capacity'] as num?)?.toDouble() ?? 1.5,
+          loadFromBack: _loadType == 'BACK' || _loadType == 'BOTH',
+          loadFromTop: _loadType == 'TOP' || _loadType == 'BOTH',
         );
         widget.onDone();
         setState(() { _saving = false; _success = true; });
@@ -1019,6 +1032,32 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(hintText: '40 A 452 BS'),
                 ),
+                const SizedBox(height: 20),
+                Text(AppStrings.get('load_type_label', locale),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: _LoadTypeChip(
+                    label: AppStrings.get('load_from_back', locale),
+                    selected: _loadType == 'BACK',
+                    isDark: isDark,
+                    onTap: () => setState(() { _loadType = 'BACK'; _checkChanges(); }),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _LoadTypeChip(
+                    label: AppStrings.get('load_from_top', locale),
+                    selected: _loadType == 'TOP',
+                    isDark: isDark,
+                    onTap: () => setState(() { _loadType = 'TOP'; _checkChanges(); }),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _LoadTypeChip(
+                    label: AppStrings.get('load_both', locale),
+                    selected: _loadType == 'BOTH',
+                    isDark: isDark,
+                    onTap: () => setState(() { _loadType = 'BOTH'; _checkChanges(); }),
+                  )),
+                ]),
                 const SizedBox(height: 20),
                 Text(AppStrings.get('documents', locale),
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
@@ -1950,6 +1989,52 @@ class _PasswordField extends StatelessWidget {
           icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary, size: 20),
           onPressed: onToggle,
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadTypeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isDark;
+  final VoidCallback onTap;
+  const _LoadTypeChip({
+    required this.label,
+    required this.selected,
+    required this.isDark,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final bg = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(colors: [
+                  Color(0xFF0f172a),
+                  Color(0xFF1e3a8a),
+                  Color(0xFF3b82f6),
+                ])
+              : null,
+          color: selected ? null : bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? Colors.transparent : border),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : textPrimary,
+          ),
         ),
       ),
     );
