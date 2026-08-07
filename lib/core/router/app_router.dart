@@ -233,6 +233,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return _slidePage(
             SelectAddressScreen(
               initialFrom: extra['initialFrom'] as Place?,
+              initialTo: extra['initialTo'] as Place?,
               fromLat: extra['fromLat'] as double,
               fromLng: extra['fromLng'] as double,
             ),

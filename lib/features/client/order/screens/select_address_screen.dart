@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
-import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -487,7 +485,7 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
               child: Row(children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => context.go(AppRoutes.clientHome),
+                    onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

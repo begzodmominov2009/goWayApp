@@ -94,12 +94,12 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
   void _recalculatePrice() {
     _priceDebounce?.cancel();
-    if (_selectedTruck == null || _selectedWeight == null || widget.distKm == null) return;
+    if (_selectedTruck == null || _selectedWeight == null || _currentDistKm == null) return;
     _priceDebounce = Timer(const Duration(milliseconds: 400), () async {
       if (!mounted) return;
       setState(() => _priceLoading = true);
       final price = await ref.read(clientRepositoryProvider).calculatePrice(
-        truckType: _selectedTruck!, distance: widget.distKm!,
+        truckType: _selectedTruck!, distance: _currentDistKm!,
         weight: _selectedWeight!, priority: _priority,
       );
       if (!mounted) return;
@@ -334,7 +334,12 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
         ? _uniqueTrucks.firstWhere((t) => t['type'] == _selectedTruck, orElse: () => {})
         : null;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _editAddresses();
+      },
+      child: Scaffold(
       backgroundColor: surface,
       body: SafeArea(
         child: Column(
@@ -656,6 +661,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

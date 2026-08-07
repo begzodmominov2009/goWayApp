@@ -418,32 +418,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     } catch (_) {}
   }
 
-  Future<void> _openSelectAddressPage() async {
-    final result = await context.push<Map<String, Place>>(
-      AppRoutes.clientSelectAddress,
-      extra: {
-        'initialFrom': _fromPlace,
-        'fromLat': _fromLat,
-        'fromLng': _fromLng,
-      },
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _fromPlace = result['from'];
-      _toPlace = result['to'];
-    });
-    _drawRoute();
-  }
-
-  Future<void> _openOrderDetailsPage() async {
-    if (_fromPlace == null || _toPlace == null) return;
-    final created = await context.push<Map<String, dynamic>>(
-      AppRoutes.clientOrderDetails,
-      extra: {'fromPlace': _fromPlace, 'toPlace': _toPlace},
-    );
-    if (created != null && mounted) _showSearching(created);
-  }
-
   // Yangi buyurtma oqimi: to'g'ridan-to'g'ri (agar hali tanlanmagan bo'lsa)
   // manzil tanlash sahifasini ochadi, so'ng OrderDetailsScreenga o'tadi.
   // "Manzil kiriting" va "Buyurtma berish" tugmalari ikkalasi ham shu bitta
