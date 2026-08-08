@@ -214,6 +214,16 @@ class DriverRepository {
     return Map<String, dynamic>.from(res.data['data'] as Map);
   }
 
+  // Driverga biriktirilgan barcha buyurtmalar (eng yangisi birinchi) —
+  // ekran ochilganda "menda hozir aktiv buyurtma bormi?" tekshiruvi uchun
+  // ishlatiladi (dedicated active-order endpoint yo'q, shu ro'yxatning
+  // birinchi elementi va uning status'i orqali aniqlanadi).
+  Future<List<Map<String, dynamic>>> getDriverOrders() async {
+    final res = await _dio.get('/orders/driver');
+    final list = res.data['data'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
   // Buyurtma statusini yangilash (masalan LOADING -> IN_TRANSIT -> DELIVERED)
   Future<void> updateOrderStatus(String orderId, String status) async {
     await _dio.put('/orders/$orderId/status', data: {'status': status});

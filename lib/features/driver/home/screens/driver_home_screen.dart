@@ -152,6 +152,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _loadIcons();
     _initLocation();
     _syncOnlineStatus();
+    _checkActiveOrderOnStart();
     _loadUnreadNotifCount();
     _notifCountTimer = Timer.periodic(const Duration(seconds: 60), (_) => _loadUnreadNotifCount());
     _maybeShowHomeTutorial();
@@ -254,6 +255,42 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           ),
         );
       }
+    } catch (_) {}
+  }
+
+  // O'zini-o'zi tekshirish: backend'da driverga ACCEPTED (yoki keyingi
+  // bosqich) holatida biriktirilgan buyurtma bo'lsa-yu, ilova hali
+  // "bo'sh/qidiruv" holatida tursa (masalan ilova qayta ochilganda yoki
+  // tarmoq/holat nomuvofiqligi natijasida) — ilova holatini shu buyurtmaga
+  // moslab, xuddi hozirgina qabul qilingandek davom ettiradi. Backend'da
+  // dedicated "/driver/active-order" endpointi yo'q, shuning uchun driverga
+  // biriktirilgan buyurtmalar ro'yxatining (eng yangisi birinchi) birinchi
+  // elementi va uning status'i orqali aniqlanadi — xuddi client tomonidagi
+  // ClientHomeScreen._checkActiveOrderOnStart() bilan bir xil naqsh.
+  // Hech qanday bildirishnoma ko'rsatilmaydi — muvofiqlik jimgina tiklanadi.
+  Future<void> _checkActiveOrderOnStart() async {
+    try {
+      final orders = await ref.read(driverRepositoryProvider).getDriverOrders();
+      if (orders.isEmpty || !mounted) return;
+      if (_activeOrder != null || _hasOrder) return;
+      final latest = orders.first;
+      final status = latest['status'] as String? ?? '';
+      if (!['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) return;
+
+      setState(() {
+        _hasOrder = false;
+        _currentOrder = null;
+        _currentOfferId = null;
+        _activeOrder = latest;
+        _initialDistanceKm = null;
+        _savedRoutePoints = null;
+        _activeSheetExpanded = false;
+      });
+      _restartLocationTimer();
+
+      await _updateTracking(fitToBounds: true);
+      _trackingTimer?.cancel();
+      _trackingTimer = Timer.periodic(const Duration(seconds: 8), (_) => _updateTracking());
     } catch (_) {}
   }
 
