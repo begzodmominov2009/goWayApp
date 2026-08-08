@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
@@ -15,10 +14,11 @@ import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/place.dart';
-import '../../../../shared/widgets/map_address_picker.dart';
 import '../../../../shared/widgets/driver_avatar.dart';
 import '../../../../core/providers/active_order_provider.dart';
 import '../widgets/client_menu_sheet.dart';
+import '../../order/widgets/order_form_modal.dart';
+import '../../order/screens/order_progress_screen.dart';
 
 const double _kMinZoom = 3.0;
 const double _kMaxZoom = 20.0;
@@ -52,25 +52,16 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   BitmapDescriptor? _finishIcon;
   BitmapDescriptor? _myLocationIcon;
 
-  Place? _fromPlace;
-  Place? _toPlace;
   double _fromLat = 41.2995;
   double _fromLng = 69.2401;
-  double? _routeDistKm;
-  int? _routeTimeMin;
 
   Map<String, dynamic>? _activeOrder;
-  Timer? _orderTimer;
   Timer? _trackingTimer;
 
   double? _driverEtaKm;
   int? _driverEtaMin;
 
   List<MapObject> _mapObjects = [];
-
-  bool _searching = false;
-  Map<String, dynamic>? _pendingOrder;
-  Offset? _radarScreenPos;
 
   int _unreadNotifCount = 0;
   Timer? _notifCountTimer;
@@ -98,7 +89,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     final newDark = Theme.of(context).brightness == Brightness.dark;
     if (newDark != _isDark) {
       _isDark = newDark;
-      if (_fromPlace != null && _toPlace != null) _drawRoute();
     }
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
@@ -106,7 +96,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
-    _orderTimer?.cancel();
     _trackingTimer?.cancel();
     _notifCountTimer?.cancel();
     super.dispose();
@@ -143,37 +132,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     _rebuildMapObjects();
   }
 
-  void _rebuildMapObjects({List<Point>? routePoints}) {
+  void _rebuildMapObjects() {
     final objects = <MapObject>[];
 
-    if (routePoints != null && _fromPlace != null && _toPlace != null) {
-      objects.add(PolylineMapObject(
-        mapId: const MapObjectId('route'),
-        polyline: Polyline(points: routePoints),
-        strokeColor: _isDark ? const Color(0xFF60A5FA) : const Color(0xFF1d4ed8),
-        strokeWidth: 5,
-      ));
-      if (_truckIcon != null) {
-        objects.add(PlacemarkMapObject(
-          mapId: const MapObjectId('from_pin'),
-          point: Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng),
-          icon: PlacemarkIcon.single(PlacemarkIconStyle(
-            image: _truckIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
-          )),
-          onTap: (_, __) => _editPinLocation(isFrom: true),
-        ));
-      }
-      if (_finishIcon != null) {
-        objects.add(PlacemarkMapObject(
-          mapId: const MapObjectId('to_pin'),
-          point: Point(latitude: _toPlace!.lat, longitude: _toPlace!.lng),
-          icon: PlacemarkIcon.single(PlacemarkIconStyle(
-            image: _finishIcon!, scale: 0.17, anchor: const Offset(0.5, 1.0),
-          )),
-          onTap: (_, __) => _editPinLocation(isFrom: false),
-        ));
-      }
-    } else if (_myLocationIcon != null && _activeOrder == null) {
+    if (_myLocationIcon != null && _activeOrder == null) {
       objects.add(PlacemarkMapObject(
         mapId: const MapObjectId('my_location'),
         point: Point(latitude: _fromLat, longitude: _fromLng),
@@ -222,16 +184,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
               ? AddressHelper.shorten(result.fullAddr)
               : result.city;
         });
-        if (_fromPlace == null && result.fullAddr.isNotEmpty) {
-          setState(() {
-            _fromPlace = Place(
-              name: result.fullAddr,
-              address: result.street,
-              lat: pos.latitude,
-              lng: pos.longitude,
-            );
-          });
-        }
       }
     } catch (_) {}
   }
@@ -294,9 +246,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       final isPickup = status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
       lat = isPickup ? _fromLat : (_activeOrder!['toLatitude'] as num?)?.toDouble();
       lng = isPickup ? _fromLng : (_activeOrder!['toLongitude'] as num?)?.toDouble();
-    } else if (_toPlace != null) {
-      lat = _toPlace!.lat;
-      lng = _toPlace!.lng;
     }
     if (lat == null || lng == null) return;
     _mapController?.moveCamera(
@@ -323,55 +272,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     );
   }
 
-  Future<void> _editPinLocation({required bool isFrom}) async {
-    final current = isFrom ? _fromPlace : _toPlace;
-    if (current == null) return;
-    final locale = ref.read(localeProvider).languageCode;
-    final result = await Navigator.push<Place>(
-      context,
-      MaterialPageRoute(
-        builder: (ctx) => MapAddressPicker(
-          initialLat: current.lat,
-          initialLng: current.lng,
-          title: isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
-          isFrom: isFrom,
-        ),
-      ),
-    );
-    if (result == null) return;
-    setState(() {
-      if (isFrom) { _fromPlace = result; } else { _toPlace = result; }
-    });
-    _drawRoute();
-  }
-
-  Future<void> _drawRoute() async {
-    if (_fromPlace == null || _toPlace == null) return;
-    final repo = ref.read(geocodeRepositoryProvider);
-
-    final route = await repo.getRoute(
-      fromLat: _fromPlace!.lat, fromLng: _fromPlace!.lng,
-      toLat: _toPlace!.lat, toLng: _toPlace!.lng,
-    );
-
-    if (!mounted) return;
-
-    final points = route?.points
-            .map((c) => Point(latitude: c[0], longitude: c[1]))
-            .toList() ??
-        [
-          Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng),
-          Point(latitude: _toPlace!.lat, longitude: _toPlace!.lng),
-        ];
-
-    setState(() {
-      _routeDistKm = route?.distanceKm;
-      _routeTimeMin = route?.durationMin;
-    });
-    _rebuildMapObjects(routePoints: points);
-    _fitBounds(points);
-  }
-
   void _fitBounds(List<Point> points) {
     if (_recentlyGestured) return;
     final lats = points.map((p) => p.latitude).toList();
@@ -394,67 +294,38 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     );
   }
 
-  Future<void> _centerOnPickupForSearch() async {
-    if (_fromPlace == null) return;
-    _mapController?.moveCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng), zoom: 16),
-      ),
-      animation: const MapAnimation(type: MapAnimationType.smooth, duration: 0.6),
-    );
-    await Future.delayed(const Duration(milliseconds: 650));
-    await _updateRadarScreenPos();
-  }
-
-  Future<void> _updateRadarScreenPos() async {
-    if (!_searching || _fromPlace == null || _mapController == null || !mounted) return;
-    try {
-      final sp = await _mapController!.getScreenPoint(
-        Point(latitude: _fromPlace!.lat, longitude: _fromPlace!.lng),
-      );
-      if (sp != null && mounted) {
-        setState(() => _radarScreenPos = Offset(sp.x, sp.y));
-      }
-    } catch (_) {}
-  }
-
-  // Yangi buyurtma oqimi: to'g'ridan-to'g'ri (agar hali tanlanmagan bo'lsa)
-  // manzil tanlash sahifasini ochadi, so'ng OrderDetailsScreenga o'tadi.
-  // "Manzil kiriting" va "Buyurtma berish" tugmalari ikkalasi ham shu bitta
-  // metodga ulanadi — har bir await natijasi tekshirilib, null bo'lsa oqim
-  // shu yerda to'xtaydi va hech qanday keyingi sahifa ochilmaydi.
   Future<void> _startOrderFlow() async {
-    // Manzil hali tanlanmagan bo'lsa — tanlash sahifasini och
-    if (_fromPlace == null || _toPlace == null) {
-      final result = await context.push<Map<String, Place>>(
-        AppRoutes.clientSelectAddress,
-        extra: {'initialFrom': _fromPlace, 'fromLat': _fromLat, 'fromLng': _fromLng},
-      );
-      if (result == null || !mounted) return;
-      setState(() { _fromPlace = result['from']; _toPlace = result['to']; });
-      _drawRoute();
-    }
-
-    if (_fromPlace == null || _toPlace == null) return;
-
-    final created = await context.push<Map<String, dynamic>>(
-      AppRoutes.clientOrderDetails,
-      extra: {
-        'fromPlace': _fromPlace, 'toPlace': _toPlace,
-        'distKm': _routeDistKm, 'timeMin': _routeTimeMin,
-      },
+    final result = await showOrderFormModal(
+      context,
+      initialFrom: null,
+      initialTo: null,
+      fromLat: _fromLat,
+      fromLng: _fromLng,
     );
-    if (created != null && mounted) _showSearching(created);
-  }
-
-  void _clearSelection() {
-    setState(() {
-      _fromPlace = null;
-      _toPlace = null;
-      _routeDistKm = null;
-      _routeTimeMin = null;
-    });
-    _rebuildMapObjects();
+    if (result == null || !mounted) return;
+    final progressResult = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => OrderProgressScreen(
+          fromPlace: result['fromPlace'] as Place,
+          toPlace: result['toPlace'] as Place,
+          truckType: result['truckType'] as String,
+          weight: result['weight'] as double,
+          cargoType: result['cargoType'] as String?,
+          note: result['note'] as String?,
+          isScheduled: result['isScheduled'] as bool,
+          scheduledFor: result['scheduledFor'] as DateTime?,
+          distKm: result['distKm'] as double?,
+          timeMin: result['timeMin'] as int?,
+        ),
+      ),
+    );
+    // OrderProgressScreen ActiveOrderDetailsScreen'ga o'tib, u yerdan
+    // pop(true) bilan qaytishi mumkin (baholab yakunlangach) — bu holda
+    // aktiv buyurtma holatini yangilaymiz.
+    if (progressResult == true && mounted) {
+      _checkActiveOrderOnStart();
+    }
   }
 
   void _openMenu() {
@@ -560,11 +431,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
         _syncActiveOrderProvider();
       } else if (status == 'CANCELLED') {
         _trackingTimer?.cancel();
-        setState(() {
-          _activeOrder = null;
-          _fromPlace = null;
-          _toPlace = null;
-        });
+        setState(() => _activeOrder = null);
         _syncActiveOrderProvider();
         _rebuildMapObjects();
       }
@@ -582,7 +449,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-    final showDestinationBtn = _activeOrder != null || _toPlace != null;
+    final showDestinationBtn = _activeOrder != null;
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
@@ -606,18 +473,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                 if (finished && (pos.zoom - _currentZoom).abs() > 0.05) {
                   setState(() => _currentZoom = pos.zoom);
                 }
-                if (_searching && finished) _updateRadarScreenPos();
               },
               mapObjects: _mapObjects,
             ),
           ),
-
-          if (_searching && _radarScreenPos != null)
-            Positioned(
-              left: _radarScreenPos!.dx - 70,
-              top: _radarScreenPos!.dy - 70,
-              child: const IgnorePointer(child: _RadarPulse()),
-            ),
 
           Positioned(
             top: 0, left: 0, right: 0,
@@ -813,10 +672,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                   )),
                   const SizedBox(height: 12),
 
-                  if (_activeOrder == null && _routeDistKm != null) ...[
-                    _RouteInfoRow(distKm: _routeDistKm!, timeMin: _routeTimeMin, isDark: isDark, locale: locale),
-                    const SizedBox(height: 10),
-                  ],
                   if (_activeOrder != null && _driverEtaKm != null) ...[
                     _RouteInfoRow(distKm: _driverEtaKm!, timeMin: _driverEtaMin, isDark: isDark, locale: locale, isEta: true),
                     const SizedBox(height: 10),
@@ -861,136 +716,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                         ]),
                       ),
                     ),
-                  ] else if (_searching && _pendingOrder != null) ...[
-                    Row(
-                      children: [
-                        const SizedBox(
-                          width: 34, height: 34,
-                          child: AppLoadingIndicator(strokeWidth: 2.6, valueColor: AlwaysStoppedAnimation(AppTheme.primaryColor)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(AppStrings.get('searching_driver', locale),
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textPrimary)),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${AddressHelper.shorten(_fromPlace?.name ?? '')} → ${AddressHelper.shorten(_toPlace?.name ?? '')}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _cancelSearching,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              side: BorderSide(color: border),
-                              foregroundColor: textSecondary,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(AppStrings.get('cancel_search', locale), maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _showSearchOrderDetails(_pendingOrder!),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              side: const BorderSide(color: AppTheme.primaryColor),
-                              foregroundColor: AppTheme.primaryColor,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(AppStrings.get('order_details', locale), maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else if (_fromPlace != null && _toPlace != null) ...[
-                    GestureDetector(
-                      onTap: _startOrderFlow,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: border),
-                        ),
-                        child: Row(
-                          children: [
-                            Column(children: [
-                              const Icon(Icons.local_shipping, size: 14, color: AppTheme.primaryColor),
-                              Container(width: 1, height: 12, color: border),
-                              const Icon(Icons.flag, size: 14, color: AppTheme.successColor),
-                            ]),
-                            const SizedBox(width: 10),
-                            Expanded(child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(AddressHelper.shorten(_fromPlace!.name),
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 4),
-                                Text(AddressHelper.shorten(_toPlace!.name),
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ],
-                            )),
-                            const Icon(Icons.edit_outlined, size: 16, color: AppTheme.primaryColor),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _clearSelection,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 50),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              side: BorderSide(color: border),
-                              foregroundColor: textSecondary,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                AppStrings.get('cancel_selection', locale),
-                                maxLines: 1,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: _GradBtn(label: AppStrings.get('place_order', locale), onTap: _startOrderFlow),
-                        ),
-                      ],
-                    ),
                   ] else
                     _GradBtn(label: AppStrings.get('enter_address', locale), onTap: _startOrderFlow),
                   const SizedBox(height: 4),
@@ -1013,108 +738,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       case 'DELIVERED': return AppStrings.get('delivered_msg', locale);
       default: return AppStrings.get('order_active', locale);
     }
-  }
-
-  // Haydovchi qidirilayotgan holat — endi modal emas, ClientHomeScreen
-  // ning o'zida (xarita fonida) doimiy pastki panel sifatida ko'rsatiladi,
-  // build() metodidagi "_searching && _pendingOrder != null" bo'limiga qarang.
-  void _showSearching(Map<String, dynamic> order) {
-    setState(() { _searching = true; _pendingOrder = order; });
-    _centerOnPickupForSearch();
-
-    _orderTimer?.cancel();
-    _orderTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      try {
-        final orders = await ref.read(clientRepositoryProvider).getOrders();
-        if (orders.isNotEmpty) {
-          final latest = orders.first;
-          final status = latest['status'] as String;
-          if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
-            _orderTimer?.cancel();
-            setState(() { _activeOrder = latest; _searching = false; _pendingOrder = null; });
-            _syncActiveOrderProvider();
-            if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
-            _startTrackingLoop();
-            _openActiveOrderDetailsPage();
-          } else if (status == 'CANCELLED') {
-            _orderTimer?.cancel();
-            setState(() { _searching = false; _pendingOrder = null; });
-          }
-        }
-      } catch (_) {}
-    });
-  }
-
-  void _cancelSearching() {
-    _orderTimer?.cancel();
-    setState(() { _searching = false; _pendingOrder = null; });
-  }
-
-  void _showSearchOrderDetails(Map<String, dynamic> order) {
-    final isDark = _isDark;
-    final locale = ref.read(localeProvider).languageCode;
-    final surface = isDark ? AppTheme.darkSurface : Colors.white;
-    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-    final bgCard = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
-
-    final truckType = order['truckType'] as String? ?? '';
-    final weight = order['weight'];
-    final price = (order['price'] as num?) ?? 0;
-    final note = order['note'] as String?;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).padding.bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(child: Container(width: 36, height: 4,
-                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Text(AppStrings.get('order_details', locale),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
-            const SizedBox(height: 14),
-            _DetailRow(
-              icon: Icons.local_shipping_outlined,
-              label: AppStrings.get('vehicle_type_label', locale),
-              value: truckType,
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-            ),
-            const SizedBox(height: 10),
-            _DetailRow(
-              icon: Icons.scale_outlined,
-              label: AppStrings.get('weight_label', locale),
-              value: weight != null ? '$weight t' : '-',
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-            ),
-            const SizedBox(height: 10),
-            _DetailRow(
-              icon: Icons.payments_outlined,
-              label: AppStrings.get('price_label', locale),
-              value: price > 0 ? '${(price / 1000).toStringAsFixed(0)}000 so\'m' : AppStrings.get('price_not_set', locale),
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-            ),
-            if (note != null && note.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _DetailRow(
-                icon: Icons.notes_outlined,
-                label: AppStrings.get('note_label', locale),
-                value: note,
-                bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   void _startTrackingLoop() {
@@ -1150,7 +773,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     if (completed == true && mounted) {
       _trackingTimer?.cancel();
       setState(() {
-        _activeOrder = null; _fromPlace = null; _toPlace = null;
+        _activeOrder = null;
         _driverEtaKm = null; _driverEtaMin = null;
       });
       _syncActiveOrderProvider();
@@ -1213,105 +836,6 @@ class _RouteInfoRow extends StatelessWidget {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
           ),
         ],
-      ]),
-    );
-  }
-}
-
-// ===== HELPERS =====
-class _RadarPulse extends StatefulWidget {
-  const _RadarPulse();
-
-  @override
-  State<_RadarPulse> createState() => _RadarPulseState();
-}
-
-class _RadarPulseState extends State<_RadarPulse> with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Widget _ring(double delay) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (ctx, _) {
-        final t = (_ctrl.value + delay) % 1.0;
-        return Opacity(
-          opacity: (1 - t).clamp(0.0, 1.0) * 0.55,
-          child: Transform.scale(
-            scale: 0.3 + t * 1.7,
-            child: Container(
-              width: 70, height: 70,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.primaryColor, width: 2),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 140, height: 140,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          _ring(0),
-          _ring(0.33),
-          _ring(0.66),
-          Container(
-            width: 20, height: 20,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 6)],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color bg;
-  final Color border;
-  final Color textP;
-  final Color textS;
-
-  const _DetailRow({
-    required this.icon, required this.label, required this.value,
-    required this.bg, required this.border, required this.textP, required this.textS,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14), border: Border.all(color: border, width: 0.5)),
-      child: Row(children: [
-        Icon(icon, size: 18, color: AppTheme.primaryColor),
-        const SizedBox(width: 10),
-        Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: textS))),
-        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textP), maxLines: 1, overflow: TextOverflow.ellipsis),
       ]),
     );
   }
