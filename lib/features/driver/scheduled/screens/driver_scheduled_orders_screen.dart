@@ -78,7 +78,8 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
         _orders = list;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DriverScheduledOrdersScreen] Rejalashtirilgan buyurtmalarni yuklashda xatolik: $e');
       if (mounted) setState(() { _orders = []; _loading = false; });
     }
   }
@@ -90,7 +91,9 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
       if (!mounted) return;
       setState(() => _driverLines = items);
       _resolveLineLabels();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DriverScheduledOrdersScreen] Liniyalarni yuklashda xatolik: $e');
+    }
   }
 
   Future<void> _resolveLineLabels() async {

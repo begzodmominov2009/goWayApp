@@ -75,7 +75,14 @@ class ClientRepository {
           if (note != null && note.isNotEmpty) 'note': note,
           'priority': priority,
           'isScheduled': isScheduled,
-          if (scheduledFor != null) 'scheduledFor': scheduledFor.toIso8601String(),
+          // .toUtc() shart — scheduledFor mahalliy (local) DateTime sifatida
+          // quriladi (order_type_sheet.dart / order_form_modal.dart), backend
+          // esa Zod orqali faqat "Z" yoki offset bilan tugagan ISO satrni
+          // qabul qiladi va UTC vaqt zonasida ishlaydi. .toUtc() bo'lmasa,
+          // "2026-08-11T19:00:00.000" kabi mintaqasiz satr yuborilib, 400
+          // xatosi bilan rad etilardi (yoki backendda 5 soatga noto'g'ri
+          // talqin qilinardi).
+          if (scheduledFor != null) 'scheduledFor': scheduledFor.toUtc().toIso8601String(),
         },
         options: Options(
           sendTimeout: const Duration(seconds: 15),
