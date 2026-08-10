@@ -19,7 +19,6 @@ class RatingDialog extends ConsumerStatefulWidget {
   final Future<void> Function(int score, String? note) onSubmit;
   final String? avatarUrl;
   final String? vehicleInfo;
-  final bool isVerified;
 
   const RatingDialog({
     super.key,
@@ -28,7 +27,6 @@ class RatingDialog extends ConsumerStatefulWidget {
     required this.onSubmit,
     this.avatarUrl,
     this.vehicleInfo,
-    this.isVerified = false,
   });
 
   @override
@@ -125,46 +123,28 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
                     style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
                     textAlign: TextAlign.center),
                 const SizedBox(height: 22),
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 88, height: 88,
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.35), width: 1.5),
-                      ),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                          shape: BoxShape.circle,
-                        ),
-                        child: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
-                            ? ClipOval(
-                                child: Image.network(
-                                  widget.avatarUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => _AvatarInitial(name: widget.subtitle),
-                                ),
-                              )
-                            : _AvatarInitial(name: widget.subtitle),
-                      ),
+                Container(
+                  width: 88, height: 88,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.primaryColor.withOpacity(0.35), width: 1.5),
+                  ),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      shape: BoxShape.circle,
                     ),
-                    if (widget.isVerified)
-                      Positioned(
-                        bottom: 0, right: 0,
-                        child: Container(
-                          width: 22, height: 22,
-                          decoration: BoxDecoration(
-                            color: AppTheme.successColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: surface, width: 2.5),
-                          ),
-                          child: const Icon(Icons.verified_rounded, size: 13, color: Colors.white),
-                        ),
-                      ),
-                  ],
+                    child: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
+                        ? ClipOval(
+                            child: Image.network(
+                              widget.avatarUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _AvatarInitial(name: widget.subtitle),
+                            ),
+                          )
+                        : _AvatarInitial(name: widget.subtitle),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (widget.subtitle.isNotEmpty)

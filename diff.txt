@@ -1,0 +1,943 @@
+diff --git a/lib/core/localization/app_strings.dart b/lib/core/localization/app_strings.dart
+index 17db1fd..c92fbfe 100644
+--- a/lib/core/localization/app_strings.dart
++++ b/lib/core/localization/app_strings.dart
+@@ -40,19 +40,12 @@ class AppStrings {
+       'load_from_top': 'Yuqoridan',
+       'load_both': 'Ikkisi ham',
+       'continue_btn': 'Davom etish',
+-      'pending_title': 'Ma\'lumotlaringiz qabul qilindi!',
+-      'pending_subtitle': 'Admin ko\'rib chiqib tasdiqlaydi. Bu biroz vaqt olishi mumkin.',
+-      'waiting': 'Kutilmoqda...',
+       'onboarding1_title': 'Yuk tashish oson!',
+       'onboarding1_subtitle': 'Istalgan shahardan istalgan shaharga yuk tashlang.',
+       'onboarding2_title': 'Real vaqt kuzatuv',
+       'onboarding2_subtitle': 'Yuk harakati xaritada real vaqtda kuzating.',
+       'onboarding3_title': 'Qulay to\'lov',
+       'onboarding3_subtitle': 'Hamyon orqali tez va xavfsiz to\'lov.',
+-      'step_sent': 'Hujjatlar yuborildi',
+-      'step_reviewing': 'Admin ko\'rib chiqmoqda',
+-      'step_approved': 'Tasdiqlash',
+-      'pending_time': 'Javob 5-20 daqiqa ichida beriladi',
+       'edit_profile': 'Profilni tahrirlash',
+       'edit': 'Tahrirlash',
+       'save': 'Saqlash',
+@@ -63,23 +56,9 @@ class AppStrings {
+       'name': 'Ism',
+       'vehicle_info': 'Mashina ma\'lumotlari',
+       'vehicle_edit': 'Mashina ma\'lumotlarini tahrirlash',
+-      'vehicle_edit_warning': 'Xavfsizlik uchun admin tasdiqlashi kerak',
+-      'verification_info': 'Tasdiqlanish ma\'lumotlari',
+-      'admin_approval_required': 'Admin tasdiqlashi talab etiladi',
+-      'admin_approval_sent': 'So\'rov yuborildi! Admin tasdiqlashini kuting.',
+-      'admin_approval_notice': 'Siz tasdiqlanish ma\'lumotlarini o\'zgartirdingiz. Xavfsizlik uchun admin tasdiqlashini kuting.',
+-      'change_plate': 'Davlat raqamini o\'zgartirish',
+-      'change_plate_subtitle': 'Yangi davlat raqami va texnik pasport talab qilinadi',
+-      'new_plate': 'Yangi davlat raqami',
+-      'upload_tech_passport': 'Texnik pasportni yuklang',
+-      'request_sent': 'So\'rov yuborildi',
+-      'request_pending': 'Admin ko\'rib chiqmoqda',
+-      'change_truck': 'Mashina turini o\'zgartirish',
++      'vehicle_info_saved': 'Ma\'lumotlar saqlandi',
+       'documents': 'Hujjatlar',
+-      'uploaded': 'Yuklangan',
+-      'not_uploaded': 'Yuklanmagan',
+       'tap_to_upload': 'Yuklash uchun bosing',
+-      'tap_to_change': 'O\'zgartirish uchun bosing',
+       'language': 'Til',
+       'theme': 'Tema',
+       'select_theme': 'Temani tanlang',
+@@ -527,19 +506,12 @@ class AppStrings {
+       'load_from_top': 'Сверху',
+       'load_both': 'И то, и другое',
+       'continue_btn': 'Продолжить',
+-      'pending_title': 'Данные приняты!',
+-      'pending_subtitle': 'Администратор рассмотрит и подтвердит.',
+-      'waiting': 'Ожидание...',
+       'onboarding1_title': 'Перевозка проста!',
+       'onboarding1_subtitle': 'Перевозите грузы из любого города в любой.',
+       'onboarding2_title': 'Отслеживание в реальном времени',
+       'onboarding2_subtitle': 'Следите за грузом на карте в реальном времени.',
+       'onboarding3_title': 'Удобная оплата',
+       'onboarding3_subtitle': 'Быстрая и безопасная оплата через кошелёк.',
+-      'step_sent': 'Документы отправлены',
+-      'step_reviewing': 'Администратор проверяет',
+-      'step_approved': 'Подтверждение',
+-      'pending_time': 'Ответ будет дан в течение 5-20 минут',
+       'edit_profile': 'Редактировать профиль',
+       'edit': 'Изменить',
+       'save': 'Сохранить',
+@@ -550,23 +522,9 @@ class AppStrings {
+       'name': 'Имя',
+       'vehicle_info': 'Данные автомобиля',
+       'vehicle_edit': 'Редактировать данные авто',
+-      'vehicle_edit_warning': 'Требуется подтверждение администратора',
+-      'verification_info': 'Данные верификации',
+-      'admin_approval_required': 'Требуется подтверждение администратора',
+-      'admin_approval_sent': 'Запрос отправлен! Ожидайте подтверждения.',
+-      'admin_approval_notice': 'Вы изменили данные верификации. В целях безопасности ожидайте подтверждения администратора.',
+-      'change_plate': 'Изменить гос. номер',
+-      'change_plate_subtitle': 'Требуется новый номер и техпаспорт',
+-      'new_plate': 'Новый гос. номер',
+-      'upload_tech_passport': 'Загрузите техпаспорт',
+-      'request_sent': 'Запрос отправлен',
+-      'request_pending': 'Администратор проверяет',
+-      'change_truck': 'Изменить тип грузовика',
++      'vehicle_info_saved': 'Данные сохранены',
+       'documents': 'Документы',
+-      'uploaded': 'Загружено',
+-      'not_uploaded': 'Не загружено',
+       'tap_to_upload': 'Нажмите для загрузки',
+-      'tap_to_change': 'Нажмите для изменения',
+       'language': 'Язык',
+       'theme': 'Тема',
+       'select_theme': 'Выберите тему',
+@@ -1014,19 +972,12 @@ class AppStrings {
+       'load_from_top': 'From the top',
+       'load_both': 'Both',
+       'continue_btn': 'Continue',
+-      'pending_title': 'Your data has been received!',
+-      'pending_subtitle': 'Admin will review and approve.',
+-      'waiting': 'Waiting...',
+       'onboarding1_title': 'Easy cargo delivery!',
+       'onboarding1_subtitle': 'Transport cargo from any city to any city.',
+       'onboarding2_title': 'Real-time tracking',
+       'onboarding2_subtitle': 'Track cargo on the map in real time.',
+       'onboarding3_title': 'Easy payment',
+       'onboarding3_subtitle': 'Fast and secure payment via wallet.',
+-      'step_sent': 'Documents submitted',
+-      'step_reviewing': 'Admin is reviewing',
+-      'step_approved': 'Approval',
+-      'pending_time': 'Response will be given within 5-20 minutes',
+       'edit_profile': 'Edit profile',
+       'edit': 'Edit',
+       'save': 'Save',
+@@ -1037,23 +988,9 @@ class AppStrings {
+       'name': 'Name',
+       'vehicle_info': 'Vehicle info',
+       'vehicle_edit': 'Edit vehicle info',
+-      'vehicle_edit_warning': 'Admin approval required',
+-      'verification_info': 'Verification info',
+-      'admin_approval_required': 'Admin approval required',
+-      'admin_approval_sent': 'Request sent! Waiting for admin approval.',
+-      'admin_approval_notice': 'You changed verification data. For security, please wait for admin approval.',
+-      'change_plate': 'Change plate number',
+-      'change_plate_subtitle': 'New plate and tech passport required',
+-      'new_plate': 'New plate number',
+-      'upload_tech_passport': 'Upload tech passport',
+-      'request_sent': 'Request sent',
+-      'request_pending': 'Admin is reviewing',
+-      'change_truck': 'Change truck type',
++      'vehicle_info_saved': 'Information saved',
+       'documents': 'Documents',
+-      'uploaded': 'Uploaded',
+-      'not_uploaded': 'Not uploaded',
+       'tap_to_upload': 'Tap to upload',
+-      'tap_to_change': 'Tap to change',
+       'language': 'Language',
+       'theme': 'Theme',
+       'select_theme': 'Choose theme',
+diff --git a/lib/core/network/auth_repository.dart b/lib/core/network/auth_repository.dart
+index 9bd4425..cec986b 100644
+--- a/lib/core/network/auth_repository.dart
++++ b/lib/core/network/auth_repository.dart
+@@ -121,15 +121,6 @@ class AuthRepository {
+     return res.data;
+   }
+ 
+-  Future<Map<String, dynamic>> getDriverStatus() async {
+-    final res = await _dio.get('/driver/profile');
+-    final data = res.data['data'];
+-    return {
+-      'verificationStatus': data['verificationStatus'],
+-      'rejectionReason': data['rejectionReason'],
+-    };
+-  }
+-
+   Future<void> resetPassword({
+     required String phone,
+     required String code,
+diff --git a/lib/core/network/driver_repository.dart b/lib/core/network/driver_repository.dart
+index c9a6146..b7daf25 100644
+--- a/lib/core/network/driver_repository.dart
++++ b/lib/core/network/driver_repository.dart
+@@ -108,9 +108,12 @@ class DriverRepository {
+     return Map<String, dynamic>.from(res.data['data'] as Map);
+   }
+ 
+-  Future<void> requestProfileUpdate({
+-    String? plateNumber,
+-    String? truckType,
++  // Hujjatlarni qisman (faqat o'zgarganlarini) yangilash — ro'yxatdan
++  // o'tishdagi uploadDocuments() dan farqli, bu yerda barcha maydonlar
++  // ixtiyoriy: driver faqat xohlagan hujjatini qayta yuklashi mumkin,
++  // hech qanday tasdiqlash talab qilinmaydi (mavjud, tasdiqsiz ishlaydigan
++  // /driver/documents endpointi qayta ishlatiladi).
++  Future<void> updateDocuments({
+     Uint8List? passportBytes,
+     String? passportName,
+     Uint8List? licFrontBytes,
+@@ -121,18 +124,16 @@ class DriverRepository {
+     String? techName,
+   }) async {
+     final formData = FormData.fromMap({
+-      if (plateNumber != null && plateNumber.isNotEmpty) 'plateNumber': plateNumber,
+-      if (truckType != null && truckType.isNotEmpty) 'truckType': truckType,
+       if (passportBytes != null && passportBytes.isNotEmpty)
+-        'passport': MultipartFile.fromBytes(passportBytes, filename: passportName ?? 'passport.jpg'),
++        'passportUrl': MultipartFile.fromBytes(passportBytes, filename: passportName ?? 'passport.jpg'),
+       if (licFrontBytes != null && licFrontBytes.isNotEmpty)
+-        'licFront': MultipartFile.fromBytes(licFrontBytes, filename: licFrontName ?? 'lic_front.jpg'),
++        'licenceFrontUrl': MultipartFile.fromBytes(licFrontBytes, filename: licFrontName ?? 'lic_front.jpg'),
+       if (licBackBytes != null && licBackBytes.isNotEmpty)
+-        'licBack': MultipartFile.fromBytes(licBackBytes, filename: licBackName ?? 'lic_back.jpg'),
++        'licenceBackUrl': MultipartFile.fromBytes(licBackBytes, filename: licBackName ?? 'lic_back.jpg'),
+       if (techBytes != null && techBytes.isNotEmpty)
+-        'tech': MultipartFile.fromBytes(techBytes, filename: techName ?? 'tech.jpg'),
++        'techPassportUrl': MultipartFile.fromBytes(techBytes, filename: techName ?? 'tech.jpg'),
+     });
+-    await _dio.post('/driver/profile-update-request', data: formData);
++    await _dio.post('/driver/documents', data: formData);
+   }
+ 
+   Future<void> changePassword({
+@@ -182,15 +183,6 @@ class DriverRepository {
+     await _dio.post('/driver/documents', data: formData);
+   }
+ 
+-  Future<Map<String, dynamic>> getDriverStatus() async {
+-    final res = await _dio.get('/driver/profile');
+-    final data = res.data['data'];
+-    return {
+-      'verificationStatus': data['verificationStatus'],
+-      'rejectionReason': data['rejectionReason'],
+-    };
+-  }
+-
+   // Aktiv offerlar
+   Future<List<Map<String, dynamic>>> getOffers() async {
+     final res = await _dio.get('/driver/offers');
+diff --git a/lib/core/router/app_router.dart b/lib/core/router/app_router.dart
+index 5083ad5..9c94bbd 100644
+--- a/lib/core/router/app_router.dart
++++ b/lib/core/router/app_router.dart
+@@ -8,7 +8,6 @@ import '../../features/auth/screens/otp_screen.dart';
+ import '../../features/auth/screens/forgot_password_screen.dart';
+ import '../../features/auth/screens/role_select_screen.dart';
+ import '../../features/auth/screens/driver_register_screen.dart';
+-import '../../features/auth/screens/pending_approval_screen.dart';
+ import '../../features/auth/screens/client_register_screen.dart';
+ import '../../features/client/home/screens/client_home_screen.dart';
+ import '../../features/client/order/screens/client_orders_screen.dart';
+@@ -47,7 +46,6 @@ class AppRoutes {
+   static const driverRegister = '/driver-register';
+   static const driverHistory = '/driver/history';
+   static const driverOrderHistoryFull = '/driver/history/all';
+-  static const pendingApproval = '/pending-approval';
+ 
+   static const clientOrders = '/client/orders';
+   static const clientRegister = '/client-register';
+@@ -192,10 +190,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
+         path: AppRoutes.driverOrderHistoryFull,
+         pageBuilder: (context, state) => _slidePage(const DriverOrderHistoryFullScreen(), state),
+       ),
+-      GoRoute(
+-        path: AppRoutes.pendingApproval,
+-        pageBuilder: (context, state) => _slidePage(const PendingApprovalScreen(), state),
+-      ),
+ 
+       GoRoute(
+         path: AppRoutes.clientRegister,
+diff --git a/lib/features/auth/screens/otp_screen.dart b/lib/features/auth/screens/otp_screen.dart
+index 8640468..0afc79d 100644
+--- a/lib/features/auth/screens/otp_screen.dart
++++ b/lib/features/auth/screens/otp_screen.dart
+@@ -94,15 +94,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
+             }
+           } else if (role == 'DRIVER') {
+             final driver = res['data']['driver'];
+-            final status = driver != null ? driver['verificationStatus'] as String? : null;
+             if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
+               // Forma hali to'ldirilmagan — backend bo'sh Driver yozuvini
+-              // yaratgan bo'lishi mumkin (status null emas bo'lsa ham).
++              // yaratgan bo'lishi mumkin.
+               context.go(AppRoutes.driverRegister);
+-            } else if (status == 'APPROVED') {
+-              context.go(AppRoutes.driverHome);
+             } else {
+-              context.go(AppRoutes.pendingApproval);
++              context.go(AppRoutes.driverHome);
+             }
+           }
+         }
+diff --git a/lib/features/auth/screens/pending_approval_screen.dart b/lib/features/auth/screens/pending_approval_screen.dart
+deleted file mode 100644
+index 6323cad..0000000
+--- a/lib/features/auth/screens/pending_approval_screen.dart
++++ /dev/null
+@@ -1,392 +0,0 @@
+-import 'dart:async';
+-import 'package:flutter/material.dart';
+-import 'package:flutter_riverpod/flutter_riverpod.dart';
+-import 'package:go_router/go_router.dart';
+-import '../../../../core/router/app_router.dart';
+-import '../../../../core/theme/app_theme.dart';
+-import '../../../../shared/widgets/app_loading_indicator.dart';
+-import '../../../../core/localization/locale_provider.dart';
+-import '../../../../core/localization/app_strings.dart';
+-import '../../../../core/network/auth_repository.dart';
+-
+-class PendingApprovalScreen extends ConsumerStatefulWidget {
+-  const PendingApprovalScreen({super.key});
+-
+-  @override
+-  ConsumerState<PendingApprovalScreen> createState() =>
+-      _PendingApprovalScreenState();
+-}
+-
+-class _PendingApprovalScreenState
+-    extends ConsumerState<PendingApprovalScreen> {
+-  Timer? _timer;
+-  bool _checking = false;
+-  String? _rejectionReason;
+-  bool _isRejected = false;
+-
+-  @override
+-  void initState() {
+-    super.initState();
+-    _checkStatus();
+-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _checkStatus());
+-  }
+-
+-  @override
+-  void dispose() {
+-    _timer?.cancel();
+-    super.dispose();
+-  }
+-
+-  Future<void> _checkStatus() async {
+-    if (_checking) return;
+-    _checking = true;
+-    try {
+-      final status = await ref.read(authRepositoryProvider).getDriverStatus();
+-      final verificationStatus = status['verificationStatus'] as String?;
+-      if (!mounted) return;
+-      if (verificationStatus == 'APPROVED') {
+-        _timer?.cancel();
+-        context.go(AppRoutes.driverHome);
+-      } else if (verificationStatus == 'REJECTED') {
+-        _timer?.cancel();
+-        setState(() {
+-          _isRejected = true;
+-          _rejectionReason = status['rejectionReason'] as String?;
+-        });
+-      }
+-    } catch (_) {
+-    } finally {
+-      _checking = false;
+-    }
+-  }
+-
+-  void _resubmit() => context.go(AppRoutes.driverRegister);
+-
+-  void _logout() async {
+-    await ref.read(authRepositoryProvider).logout();
+-    if (mounted) context.go(AppRoutes.onboarding);
+-  }
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    final locale = ref.watch(localeProvider).languageCode;
+-    final isDark = Theme.of(context).brightness == Brightness.dark;
+-
+-    if (_isRejected) {
+-      return Scaffold(
+-        body: SafeArea(
+-          child: SingleChildScrollView(
+-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.center,
+-              children: [
+-                Container(
+-                  width: 120,
+-                  height: 120,
+-                  decoration: BoxDecoration(
+-                    color: AppTheme.errorColor.withOpacity(0.1),
+-                    shape: BoxShape.circle,
+-                  ),
+-                  child: const Center(
+-                    child: Text('❌', style: TextStyle(fontSize: 60)),
+-                  ),
+-                ),
+-                const SizedBox(height: 32),
+-                Text(
+-                  'Hujjatlar rad etildi',
+-                  style: TextStyle(
+-                    fontSize: 24,
+-                    fontWeight: FontWeight.w800,
+-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+-                  ),
+-                  textAlign: TextAlign.center,
+-                ),
+-                const SizedBox(height: 16),
+-                Text(
+-                  'Adminlar hujjatlaringizni ko\'rib chiqdi va rad etdi.',
+-                  style: TextStyle(
+-                    fontSize: 16,
+-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+-                    height: 1.6,
+-                  ),
+-                  textAlign: TextAlign.center,
+-                ),
+-                if (_rejectionReason != null) ...[
+-                  const SizedBox(height: 20),
+-                  Container(
+-                    width: double.infinity,
+-                    padding: const EdgeInsets.all(16),
+-                    decoration: BoxDecoration(
+-                      color: AppTheme.errorColor.withOpacity(0.08),
+-                      borderRadius: BorderRadius.circular(14),
+-                      border: Border.all(color: AppTheme.errorColor.withOpacity(0.2)),
+-                    ),
+-                    child: Column(
+-                      crossAxisAlignment: CrossAxisAlignment.start,
+-                      children: [
+-                        const Text(
+-                          'Sabab:',
+-                          style: TextStyle(
+-                            color: AppTheme.errorColor,
+-                            fontWeight: FontWeight.w700,
+-                            fontSize: 14,
+-                          ),
+-                        ),
+-                        const SizedBox(height: 6),
+-                        Text(
+-                          _rejectionReason!,
+-                          style: const TextStyle(
+-                            color: AppTheme.errorColor,
+-                            fontSize: 15,
+-                            height: 1.5,
+-                          ),
+-                        ),
+-                      ],
+-                    ),
+-                  ),
+-                ],
+-                const SizedBox(height: 32),
+-                SizedBox(
+-                  width: double.infinity,
+-                  child: ElevatedButton(
+-                    onPressed: _resubmit,
+-                    child: const Text('Qayta yuborish'),
+-                  ),
+-                ),
+-                const SizedBox(height: 12),
+-                SizedBox(
+-                  width: double.infinity,
+-                  child: OutlinedButton(
+-                    onPressed: _logout,
+-                    child: const Text('Chiqish'),
+-                  ),
+-                ),
+-              ],
+-            ),
+-          ),
+-        ),
+-      );
+-    }
+-
+-    return Scaffold(
+-      body: SafeArea(
+-        child: SingleChildScrollView(
+-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+-          child: Column(
+-            crossAxisAlignment: CrossAxisAlignment.center,
+-            children: [
+-              Container(
+-                width: 120,
+-                height: 120,
+-                decoration: BoxDecoration(
+-                  color: AppTheme.warningColor.withOpacity(0.1),
+-                  shape: BoxShape.circle,
+-                ),
+-                child: const Center(
+-                  child: Text('⏳', style: TextStyle(fontSize: 60)),
+-                ),
+-              ),
+-              const SizedBox(height: 32),
+-              Text(
+-                AppStrings.get('pending_title', locale),
+-                style: TextStyle(
+-                  fontSize: 24,
+-                  fontWeight: FontWeight.w800,
+-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+-                ),
+-                textAlign: TextAlign.center,
+-              ),
+-              const SizedBox(height: 16),
+-              Text(
+-                AppStrings.get('pending_subtitle', locale),
+-                style: TextStyle(
+-                  fontSize: 16,
+-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+-                  height: 1.6,
+-                ),
+-                textAlign: TextAlign.center,
+-              ),
+-              const SizedBox(height: 12),
+-              Container(
+-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+-                decoration: BoxDecoration(
+-                  color: AppTheme.primaryColor.withOpacity(0.08),
+-                  borderRadius: BorderRadius.circular(10),
+-                ),
+-                child: Text(
+-                  AppStrings.get('pending_time', locale),
+-                  style: const TextStyle(
+-                    color: AppTheme.primaryColor,
+-                    fontWeight: FontWeight.w500,
+-                    fontSize: 14,
+-                  ),
+-                  textAlign: TextAlign.center,
+-                ),
+-              ),
+-              const SizedBox(height: 32),
+-              Container(
+-                width: double.infinity,
+-                padding: const EdgeInsets.all(20),
+-                decoration: BoxDecoration(
+-                  color: AppTheme.warningColor.withOpacity(0.05),
+-                  borderRadius: BorderRadius.circular(16),
+-                  border: Border.all(color: AppTheme.warningColor.withOpacity(0.2)),
+-                ),
+-                child: Row(
+-                  children: [
+-                    Container(
+-                      width: 12,
+-                      height: 12,
+-                      decoration: const BoxDecoration(
+-                        color: AppTheme.warningColor,
+-                        shape: BoxShape.circle,
+-                      ),
+-                    ),
+-                    const SizedBox(width: 12),
+-                    Text(
+-                      AppStrings.get('waiting', locale),
+-                      style: const TextStyle(
+-                        color: AppTheme.warningColor,
+-                        fontWeight: FontWeight.w600,
+-                        fontSize: 16,
+-                      ),
+-                    ),
+-                    const Spacer(),
+-                    const SizedBox(
+-                      width: 14,
+-                      height: 14,
+-                      child: AppLoadingIndicator(
+-                        strokeWidth: 2,
+-                        color: AppTheme.warningColor,
+-                      ),
+-                    ),
+-                  ],
+-                ),
+-              ),
+-              const SizedBox(height: 24),
+-              _StepItem(
+-                number: '1',
+-                title: AppStrings.get('step_sent', locale),
+-                isDone: true,
+-                isDark: isDark,
+-              ),
+-              _StepItem(
+-                number: '2',
+-                title: AppStrings.get('step_reviewing', locale),
+-                isDone: false,
+-                isActive: true,
+-                isDark: isDark,
+-              ),
+-              _StepItem(
+-                number: '3',
+-                title: AppStrings.get('step_approved', locale),
+-                isDone: false,
+-                isDark: isDark,
+-              ),
+-              const SizedBox(height: 32),
+-              TextButton(
+-                onPressed: _logout,
+-                child: Text(
+-                  'Chiqish',
+-                  style: TextStyle(
+-                    color: isDark
+-                        ? AppTheme.darkTextSecondary
+-                        : AppTheme.textSecondary,
+-                  ),
+-                ),
+-              ),
+-            ],
+-          ),
+-        ),
+-      ),
+-    );
+-  }
+-}
+-
+-class _StepItem extends StatelessWidget {
+-  final String number;
+-  final String title;
+-  final bool isDone;
+-  final bool isActive;
+-  final bool isDark;
+-
+-  const _StepItem({
+-    required this.number,
+-    required this.title,
+-    required this.isDone,
+-    this.isActive = false,
+-    required this.isDark,
+-  });
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    return Padding(
+-      padding: const EdgeInsets.symmetric(vertical: 8),
+-      child: Row(
+-        children: [
+-          Container(
+-            width: 32,
+-            height: 32,
+-            decoration: BoxDecoration(
+-              color: isDone
+-                  ? AppTheme.successColor
+-                  : isActive
+-                      ? AppTheme.warningColor
+-                      : isDark
+-                          ? AppTheme.darkSurface
+-                          : AppTheme.backgroundColor,
+-              shape: BoxShape.circle,
+-              border: Border.all(
+-                color: isDone
+-                    ? AppTheme.successColor
+-                    : isActive
+-                        ? AppTheme.warningColor
+-                        : isDark
+-                            ? AppTheme.darkBorder
+-                            : AppTheme.borderColor,
+-              ),
+-            ),
+-            child: Center(
+-              child: isDone
+-                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+-                  : isActive
+-                      ? const SizedBox(
+-                          width: 14,
+-                          height: 14,
+-                          child: AppLoadingIndicator(
+-                            strokeWidth: 2,
+-                            color: Colors.white,
+-                          ),
+-                        )
+-                      : Text(
+-                          number,
+-                          style: TextStyle(
+-                            fontSize: 14,
+-                            fontWeight: FontWeight.w600,
+-                            color: isDark
+-                                ? AppTheme.darkTextSecondary
+-                                : AppTheme.textSecondary,
+-                          ),
+-                        ),
+-            ),
+-          ),
+-          const SizedBox(width: 12),
+-          Text(
+-            title,
+-            style: TextStyle(
+-              fontSize: 15,
+-              fontWeight: isDone || isActive ? FontWeight.w600 : FontWeight.w400,
+-              color: isDone
+-                  ? AppTheme.successColor
+-                  : isActive
+-                      ? AppTheme.warningColor
+-                      : isDark
+-                          ? AppTheme.darkTextSecondary
+-                          : AppTheme.textSecondary,
+-            ),
+-          ),
+-        ],
+-      ),
+-    );
+-  }
+-}
+\ No newline at end of file
+diff --git a/lib/features/auth/screens/phone_screen.dart b/lib/features/auth/screens/phone_screen.dart
+index 739255e..d61b1d6 100644
+--- a/lib/features/auth/screens/phone_screen.dart
++++ b/lib/features/auth/screens/phone_screen.dart
+@@ -85,13 +85,10 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
+             }
+           } else if (role == 'DRIVER') {
+             final driver = res['data']['driver'];
+-            final status = driver != null ? driver['verificationStatus'] as String? : null;
+             if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
+               context.go(AppRoutes.driverRegister);
+-            } else if (status == 'APPROVED') {
+-              context.go(AppRoutes.driverHome);
+             } else {
+-              context.go(AppRoutes.pendingApproval);
++              context.go(AppRoutes.driverHome);
+             }
+           }
+         }
+diff --git a/lib/features/common/splash/screens/splash_screen.dart b/lib/features/common/splash/screens/splash_screen.dart
+index 0a4a3c9..727f7d2 100644
+--- a/lib/features/common/splash/screens/splash_screen.dart
++++ b/lib/features/common/splash/screens/splash_screen.dart
+@@ -109,17 +109,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
+       if (role == 'CLIENT') {
+         context.go(AppRoutes.clientHome);
+       } else if (role == 'DRIVER') {
+-        try {
+-          final status = await authRepo.getDriverStatus();
+-          final vs = status['verificationStatus'] as String?;
+-          if (vs == 'APPROVED') {
+-            context.go(AppRoutes.driverHome);
+-          } else {
+-            context.go(AppRoutes.pendingApproval);
+-          }
+-        } catch (_) {
+-          context.go(AppRoutes.driverHome);
+-        }
++        context.go(AppRoutes.driverHome);
+       } else {
+         context.go(AppRoutes.onboarding);
+       }
+diff --git a/lib/features/driver/profile/screens/driver_profile_screen.dart b/lib/features/driver/profile/screens/driver_profile_screen.dart
+index 73a57d7..d13bcd1 100644
+--- a/lib/features/driver/profile/screens/driver_profile_screen.dart
++++ b/lib/features/driver/profile/screens/driver_profile_screen.dart
+@@ -853,59 +853,55 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
+   }
+ 
+   Future<void> _submit() async {
++    final locale = ref.read(localeProvider).languageCode;
+     setState(() => _saving = true);
+     try {
+       final repo = ref.read(driverRepositoryProvider);
+       final loadTypeChanged = _loadType != _origLoadType;
+-      if ((_truckType != _origTruckType || loadTypeChanged) && _newBytes.isEmpty &&
+-          _plateCtrl.text.trim() == _origPlate) {
++      final plateChanged = _plateCtrl.text.trim() != _origPlate;
++      final truckChanged = _truckType != _origTruckType;
++
++      // Matn maydonlari — o'zgargan bo'lsa, PUT /driver/profile orqali
++      // darhol saqlanadi (hech qanday tasdiqlash talab qilinmaydi).
++      if (truckChanged || loadTypeChanged || plateChanged) {
+         final truck = widget.trucks.firstWhere(
+           (t) => t['type'] == _truckType, orElse: () => widget.profile ?? {});
+         await repo.updateProfile(
+           fullName: widget.profile?['fullName'] ?? '',
+           truckType: _truckType ?? _origTruckType ?? '',
+-          plateNumber: _origPlate,
++          plateNumber: plateChanged
++              ? _plateCtrl.text.trim().toUpperCase().replaceAll(' ', '')
++              : _origPlate,
+           capacity: (truck['capacity'] as num?)?.toDouble() ?? 1.5,
+           loadFromBack: _loadType == 'BACK' || _loadType == 'BOTH',
+           loadFromTop: _loadType == 'TOP' || _loadType == 'BOTH',
+         );
+-        widget.onDone();
+-        setState(() { _saving = false; _success = true; });
+-        return;
+       }
+-      if (_plateCtrl.text.trim() != _origPlate && _newBytes['tech'] == null) {
+-        setState(() => _saving = false);
+-        if (mounted) {
+-          ScaffoldMessenger.of(context).showSnackBar(
+-            const SnackBar(
+-              content: Text('Davlat raqami o\'zgartirilganda texnik pasport rasmi majburiy!'),
+-              backgroundColor: AppTheme.errorColor,
+-            ),
+-          );
+-        }
+-        return;
++
++      // Hujjatlar — endi ixtiyoriy: faqat driver yangi rasm tanlagan
++      // bo'lsa yuboriladi, POST /driver/documents ham tasdiqlash talab
++      // qilmaydi.
++      if (_newBytes.isNotEmpty) {
++        await repo.updateDocuments(
++          passportBytes: _newBytes['passport'],
++          passportName: _newNames['passport'],
++          licFrontBytes: _newBytes['licFront'],
++          licFrontName: _newNames['licFront'],
++          licBackBytes: _newBytes['licBack'],
++          licBackName: _newNames['licBack'],
++          techBytes: _newBytes['tech'],
++          techName: _newNames['tech'],
++        );
+       }
+-      await repo.requestProfileUpdate(
+-        plateNumber: _plateCtrl.text.trim() != _origPlate
+-            ? _plateCtrl.text.trim().toUpperCase().replaceAll(' ', '') : null,
+-        truckType: _truckType != _origTruckType ? _truckType : null,
+-        passportBytes: _newBytes['passport'],
+-        passportName: _newNames['passport'],
+-        licFrontBytes: _newBytes['licFront'],
+-        licFrontName: _newNames['licFront'],
+-        licBackBytes: _newBytes['licBack'],
+-        licBackName: _newNames['licBack'],
+-        techBytes: _newBytes['tech'],
+-        techName: _newNames['tech'],
+-      );
++
+       widget.onDone();
++      if (!mounted) return;
+       setState(() { _saving = false; _success = true; });
+     } catch (e) {
++      if (!mounted) return;
+       setState(() => _saving = false);
+-      if (mounted) {
+-        ScaffoldMessenger.of(context).showSnackBar(
+-          SnackBar(content: Text('Xatolik: $e'), backgroundColor: AppTheme.errorColor));
+-      }
++      ScaffoldMessenger.of(context).showSnackBar(
++        SnackBar(content: Text('${AppStrings.get('generic_error', locale)}: $e'), backgroundColor: AppTheme.errorColor));
+     }
+   }
+ 
+@@ -1022,9 +1018,6 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
+                 const SizedBox(height: 16),
+                 Text(AppStrings.get('plate_number', locale),
+                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
+-                const SizedBox(height: 4),
+-                Text('Admin tasdiqlagandan keyin o\'zgaradi',
+-                    style: TextStyle(fontSize: 11, color: AppTheme.warningColor)),
+                 const SizedBox(height: 8),
+                 TextField(
+                   controller: _plateCtrl,
+@@ -1059,7 +1052,7 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
+                   )),
+                 ]),
+                 const SizedBox(height: 20),
+-                Text(AppStrings.get('documents', locale),
++                Text('${AppStrings.get('documents', locale)} (${AppStrings.get('optional_label', locale)})',
+                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
+                 const SizedBox(height: 4),
+                 Text('Rasmni ko\'rish uchun pastki o\'ng belgini bosing',
+@@ -1162,25 +1155,13 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
+           Container(
+             width: 64, height: 64,
+             decoration: BoxDecoration(
+-              color: AppTheme.warningColor.withOpacity(0.1), shape: BoxShape.circle),
+-            child: const Icon(Icons.security_outlined, color: AppTheme.warningColor, size: 32),
++              color: AppTheme.successColor.withOpacity(0.1), shape: BoxShape.circle),
++            child: const Icon(Icons.check_circle_outline, color: AppTheme.successColor, size: 32),
+           ),
+           const SizedBox(height: 20),
+-          Text(AppStrings.get('admin_approval_sent', locale),
++          Text(AppStrings.get('vehicle_info_saved', locale),
+               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textPrimary),
+               textAlign: TextAlign.center),
+-          const SizedBox(height: 12),
+-          Container(
+-            padding: const EdgeInsets.all(14),
+-            decoration: BoxDecoration(
+-              color: AppTheme.warningColor.withOpacity(0.08),
+-              borderRadius: BorderRadius.circular(12),
+-              border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+-            ),
+-            child: Text(AppStrings.get('admin_approval_notice', locale),
+-                style: const TextStyle(fontSize: 13, color: AppTheme.warningColor, height: 1.5),
+-                textAlign: TextAlign.center),
+-          ),
+           const Spacer(),
+           _GradientButton(
+             label: AppStrings.get('close', locale),
+diff --git a/lib/shared/widgets/rating_dialog.dart b/lib/shared/widgets/rating_dialog.dart
+index 52ca1b3..41661e3 100644
+--- a/lib/shared/widgets/rating_dialog.dart
++++ b/lib/shared/widgets/rating_dialog.dart
+@@ -19,7 +19,6 @@ class RatingDialog extends ConsumerStatefulWidget {
+   final Future<void> Function(int score, String? note) onSubmit;
+   final String? avatarUrl;
+   final String? vehicleInfo;
+-  final bool isVerified;
+ 
+   const RatingDialog({
+     super.key,
+@@ -28,7 +27,6 @@ class RatingDialog extends ConsumerStatefulWidget {
+     required this.onSubmit,
+     this.avatarUrl,
+     this.vehicleInfo,
+-    this.isVerified = false,
+   });
+ 
+   @override
+@@ -125,46 +123,28 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
+                     style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
+                     textAlign: TextAlign.center),
+                 const SizedBox(height: 22),
+-                Stack(
+-                  alignment: Alignment.center,
+-                  children: [
+-                    Container(
+-                      width: 88, height: 88,
+-                      padding: const EdgeInsets.all(3),
+-                      decoration: BoxDecoration(
+-                        shape: BoxShape.circle,
+-                        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.35), width: 1.5),
+-                      ),
+-                      child: Container(
+-                        decoration: const BoxDecoration(
+-                          gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+-                          shape: BoxShape.circle,
+-                        ),
+-                        child: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
+-                            ? ClipOval(
+-                                child: Image.network(
+-                                  widget.avatarUrl!,
+-                                  fit: BoxFit.cover,
+-                                  errorBuilder: (_, __, ___) => _AvatarInitial(name: widget.subtitle),
+-                                ),
+-                              )
+-                            : _AvatarInitial(name: widget.subtitle),
+-                      ),
++                Container(
++                  width: 88, height: 88,
++                  padding: const EdgeInsets.all(3),
++                  decoration: BoxDecoration(
++                    shape: BoxShape.circle,
++                    border: Border.all(color: AppTheme.primaryColor.withOpacity(0.35), width: 1.5),
++                  ),
++                  child: Container(
++                    decoration: const BoxDecoration(
++                      gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
++                      shape: BoxShape.circle,
+                     ),
+-                    if (widget.isVerified)
+-                      Positioned(
+-                        bottom: 0, right: 0,
+-                        child: Container(
+-                          width: 22, height: 22,
+-                          decoration: BoxDecoration(
+-                            color: AppTheme.successColor,
+-                            shape: BoxShape.circle,
+-                            border: Border.all(color: surface, width: 2.5),
+-                          ),
+-                          child: const Icon(Icons.verified_rounded, size: 13, color: Colors.white),
+-                        ),
+-                      ),
+-                  ],
++                    child: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
++                        ? ClipOval(
++                            child: Image.network(
++                              widget.avatarUrl!,
++                              fit: BoxFit.cover,
++                              errorBuilder: (_, __, ___) => _AvatarInitial(name: widget.subtitle),
++                            ),
++                          )
++                        : _AvatarInitial(name: widget.subtitle),
++                  ),
+                 ),
+                 const SizedBox(height: 12),
+                 if (widget.subtitle.isNotEmpty)

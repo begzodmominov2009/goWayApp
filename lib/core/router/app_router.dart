@@ -8,7 +8,6 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/role_select_screen.dart';
 import '../../features/auth/screens/driver_register_screen.dart';
-import '../../features/auth/screens/pending_approval_screen.dart';
 import '../../features/auth/screens/client_register_screen.dart';
 import '../../features/client/home/screens/client_home_screen.dart';
 import '../../features/client/order/screens/client_orders_screen.dart';
@@ -47,7 +46,6 @@ class AppRoutes {
   static const driverRegister = '/driver-register';
   static const driverHistory = '/driver/history';
   static const driverOrderHistoryFull = '/driver/history/all';
-  static const pendingApproval = '/pending-approval';
 
   static const clientOrders = '/client/orders';
   static const clientRegister = '/client-register';
@@ -191,10 +189,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.driverOrderHistoryFull,
         pageBuilder: (context, state) => _slidePage(const DriverOrderHistoryFullScreen(), state),
-      ),
-      GoRoute(
-        path: AppRoutes.pendingApproval,
-        pageBuilder: (context, state) => _slidePage(const PendingApprovalScreen(), state),
       ),
 
       GoRoute(

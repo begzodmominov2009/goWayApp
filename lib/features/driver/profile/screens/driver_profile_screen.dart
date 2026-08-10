@@ -853,59 +853,55 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
   }
 
   Future<void> _submit() async {
+    final locale = ref.read(localeProvider).languageCode;
     setState(() => _saving = true);
     try {
       final repo = ref.read(driverRepositoryProvider);
       final loadTypeChanged = _loadType != _origLoadType;
-      if ((_truckType != _origTruckType || loadTypeChanged) && _newBytes.isEmpty &&
-          _plateCtrl.text.trim() == _origPlate) {
+      final plateChanged = _plateCtrl.text.trim() != _origPlate;
+      final truckChanged = _truckType != _origTruckType;
+
+      // Matn maydonlari — o'zgargan bo'lsa, PUT /driver/profile orqali
+      // darhol saqlanadi (hech qanday tasdiqlash talab qilinmaydi).
+      if (truckChanged || loadTypeChanged || plateChanged) {
         final truck = widget.trucks.firstWhere(
           (t) => t['type'] == _truckType, orElse: () => widget.profile ?? {});
         await repo.updateProfile(
           fullName: widget.profile?['fullName'] ?? '',
           truckType: _truckType ?? _origTruckType ?? '',
-          plateNumber: _origPlate,
+          plateNumber: plateChanged
+              ? _plateCtrl.text.trim().toUpperCase().replaceAll(' ', '')
+              : _origPlate,
           capacity: (truck['capacity'] as num?)?.toDouble() ?? 1.5,
           loadFromBack: _loadType == 'BACK' || _loadType == 'BOTH',
           loadFromTop: _loadType == 'TOP' || _loadType == 'BOTH',
         );
-        widget.onDone();
-        setState(() { _saving = false; _success = true; });
-        return;
       }
-      if (_plateCtrl.text.trim() != _origPlate && _newBytes['tech'] == null) {
-        setState(() => _saving = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Davlat raqami o\'zgartirilganda texnik pasport rasmi majburiy!'),
-              backgroundColor: AppTheme.errorColor,
-            ),
-          );
-        }
-        return;
+
+      // Hujjatlar — endi ixtiyoriy: faqat driver yangi rasm tanlagan
+      // bo'lsa yuboriladi, POST /driver/documents ham tasdiqlash talab
+      // qilmaydi.
+      if (_newBytes.isNotEmpty) {
+        await repo.updateDocuments(
+          passportBytes: _newBytes['passport'],
+          passportName: _newNames['passport'],
+          licFrontBytes: _newBytes['licFront'],
+          licFrontName: _newNames['licFront'],
+          licBackBytes: _newBytes['licBack'],
+          licBackName: _newNames['licBack'],
+          techBytes: _newBytes['tech'],
+          techName: _newNames['tech'],
+        );
       }
-      await repo.requestProfileUpdate(
-        plateNumber: _plateCtrl.text.trim() != _origPlate
-            ? _plateCtrl.text.trim().toUpperCase().replaceAll(' ', '') : null,
-        truckType: _truckType != _origTruckType ? _truckType : null,
-        passportBytes: _newBytes['passport'],
-        passportName: _newNames['passport'],
-        licFrontBytes: _newBytes['licFront'],
-        licFrontName: _newNames['licFront'],
-        licBackBytes: _newBytes['licBack'],
-        licBackName: _newNames['licBack'],
-        techBytes: _newBytes['tech'],
-        techName: _newNames['tech'],
-      );
+
       widget.onDone();
+      if (!mounted) return;
       setState(() { _saving = false; _success = true; });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _saving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xatolik: $e'), backgroundColor: AppTheme.errorColor));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${AppStrings.get('generic_error', locale)}: $e'), backgroundColor: AppTheme.errorColor));
     }
   }
 
@@ -1022,9 +1018,6 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
                 const SizedBox(height: 16),
                 Text(AppStrings.get('plate_number', locale),
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
-                const SizedBox(height: 4),
-                Text('Admin tasdiqlagandan keyin o\'zgaradi',
-                    style: TextStyle(fontSize: 11, color: AppTheme.warningColor)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _plateCtrl,
@@ -1059,7 +1052,7 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
                   )),
                 ]),
                 const SizedBox(height: 20),
-                Text(AppStrings.get('documents', locale),
+                Text('${AppStrings.get('documents', locale)} (${AppStrings.get('optional_label', locale)})',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textSecondary)),
                 const SizedBox(height: 4),
                 Text('Rasmni ko\'rish uchun pastki o\'ng belgini bosing',
@@ -1162,25 +1155,13 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
           Container(
             width: 64, height: 64,
             decoration: BoxDecoration(
-              color: AppTheme.warningColor.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.security_outlined, color: AppTheme.warningColor, size: 32),
+              color: AppTheme.successColor.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.check_circle_outline, color: AppTheme.successColor, size: 32),
           ),
           const SizedBox(height: 20),
-          Text(AppStrings.get('admin_approval_sent', locale),
+          Text(AppStrings.get('vehicle_info_saved', locale),
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textPrimary),
               textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.warningColor.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
-            ),
-            child: Text(AppStrings.get('admin_approval_notice', locale),
-                style: const TextStyle(fontSize: 13, color: AppTheme.warningColor, height: 1.5),
-                textAlign: TextAlign.center),
-          ),
           const Spacer(),
           _GradientButton(
             label: AppStrings.get('close', locale),

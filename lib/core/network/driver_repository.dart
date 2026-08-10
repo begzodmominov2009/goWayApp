@@ -108,9 +108,12 @@ class DriverRepository {
     return Map<String, dynamic>.from(res.data['data'] as Map);
   }
 
-  Future<void> requestProfileUpdate({
-    String? plateNumber,
-    String? truckType,
+  // Hujjatlarni qisman (faqat o'zgarganlarini) yangilash — ro'yxatdan
+  // o'tishdagi uploadDocuments() dan farqli, bu yerda barcha maydonlar
+  // ixtiyoriy: driver faqat xohlagan hujjatini qayta yuklashi mumkin,
+  // hech qanday tasdiqlash talab qilinmaydi (mavjud, tasdiqsiz ishlaydigan
+  // /driver/documents endpointi qayta ishlatiladi).
+  Future<void> updateDocuments({
     Uint8List? passportBytes,
     String? passportName,
     Uint8List? licFrontBytes,
@@ -121,18 +124,16 @@ class DriverRepository {
     String? techName,
   }) async {
     final formData = FormData.fromMap({
-      if (plateNumber != null && plateNumber.isNotEmpty) 'plateNumber': plateNumber,
-      if (truckType != null && truckType.isNotEmpty) 'truckType': truckType,
       if (passportBytes != null && passportBytes.isNotEmpty)
-        'passport': MultipartFile.fromBytes(passportBytes, filename: passportName ?? 'passport.jpg'),
+        'passportUrl': MultipartFile.fromBytes(passportBytes, filename: passportName ?? 'passport.jpg'),
       if (licFrontBytes != null && licFrontBytes.isNotEmpty)
-        'licFront': MultipartFile.fromBytes(licFrontBytes, filename: licFrontName ?? 'lic_front.jpg'),
+        'licenceFrontUrl': MultipartFile.fromBytes(licFrontBytes, filename: licFrontName ?? 'lic_front.jpg'),
       if (licBackBytes != null && licBackBytes.isNotEmpty)
-        'licBack': MultipartFile.fromBytes(licBackBytes, filename: licBackName ?? 'lic_back.jpg'),
+        'licenceBackUrl': MultipartFile.fromBytes(licBackBytes, filename: licBackName ?? 'lic_back.jpg'),
       if (techBytes != null && techBytes.isNotEmpty)
-        'tech': MultipartFile.fromBytes(techBytes, filename: techName ?? 'tech.jpg'),
+        'techPassportUrl': MultipartFile.fromBytes(techBytes, filename: techName ?? 'tech.jpg'),
     });
-    await _dio.post('/driver/profile-update-request', data: formData);
+    await _dio.post('/driver/documents', data: formData);
   }
 
   Future<void> changePassword({
@@ -180,15 +181,6 @@ class DriverRepository {
       'plateNumber': newPlate,
     });
     await _dio.post('/driver/documents', data: formData);
-  }
-
-  Future<Map<String, dynamic>> getDriverStatus() async {
-    final res = await _dio.get('/driver/profile');
-    final data = res.data['data'];
-    return {
-      'verificationStatus': data['verificationStatus'],
-      'rejectionReason': data['rejectionReason'],
-    };
   }
 
   // Aktiv offerlar

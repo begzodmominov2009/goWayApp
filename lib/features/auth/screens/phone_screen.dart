@@ -85,13 +85,10 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
             }
           } else if (role == 'DRIVER') {
             final driver = res['data']['driver'];
-            final status = driver != null ? driver['verificationStatus'] as String? : null;
             if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
               context.go(AppRoutes.driverRegister);
-            } else if (status == 'APPROVED') {
-              context.go(AppRoutes.driverHome);
             } else {
-              context.go(AppRoutes.pendingApproval);
+              context.go(AppRoutes.driverHome);
             }
           }
         }

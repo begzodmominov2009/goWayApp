@@ -121,15 +121,6 @@ class AuthRepository {
     return res.data;
   }
 
-  Future<Map<String, dynamic>> getDriverStatus() async {
-    final res = await _dio.get('/driver/profile');
-    final data = res.data['data'];
-    return {
-      'verificationStatus': data['verificationStatus'],
-      'rejectionReason': data['rejectionReason'],
-    };
-  }
-
   Future<void> resetPassword({
     required String phone,
     required String code,

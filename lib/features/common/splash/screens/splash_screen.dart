@@ -109,17 +109,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (role == 'CLIENT') {
         context.go(AppRoutes.clientHome);
       } else if (role == 'DRIVER') {
-        try {
-          final status = await authRepo.getDriverStatus();
-          final vs = status['verificationStatus'] as String?;
-          if (vs == 'APPROVED') {
-            context.go(AppRoutes.driverHome);
-          } else {
-            context.go(AppRoutes.pendingApproval);
-          }
-        } catch (_) {
-          context.go(AppRoutes.driverHome);
-        }
+        context.go(AppRoutes.driverHome);
       } else {
         context.go(AppRoutes.onboarding);
       }

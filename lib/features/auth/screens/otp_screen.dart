@@ -94,15 +94,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             }
           } else if (role == 'DRIVER') {
             final driver = res['data']['driver'];
-            final status = driver != null ? driver['verificationStatus'] as String? : null;
             if (driver == null || driver['fullName'] == null || driver['truckType'] == null) {
               // Forma hali to'ldirilmagan — backend bo'sh Driver yozuvini
-              // yaratgan bo'lishi mumkin (status null emas bo'lsa ham).
+              // yaratgan bo'lishi mumkin.
               context.go(AppRoutes.driverRegister);
-            } else if (status == 'APPROVED') {
-              context.go(AppRoutes.driverHome);
             } else {
-              context.go(AppRoutes.pendingApproval);
+              context.go(AppRoutes.driverHome);
             }
           }
         }
