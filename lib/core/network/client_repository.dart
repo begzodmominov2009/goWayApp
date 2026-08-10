@@ -167,7 +167,21 @@ class ClientRepository {
     await _dio.put('/client/profile', data: {'fullName': fullName});
   }
 
-  // Parol o'rnatish
+  // Parolni o'zgartirish — joriy parol tekshiriladi (allaqachon paroli
+  // bor foydalanuvchi uchun, driver_repository.dart dagi changePassword
+  // bilan bir xil naqsh).
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _dio.put('/auth/password', data: {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    });
+  }
+
+  // Parol o'rnatish — hali paroli yo'q foydalanuvchi uchun (masalan
+  // ro'yxatdan o'tishdan keyin), joriy parol tekshirilmaydi.
   Future<void> setPassword(String password) async {
     await _dio.put('/auth/password', data: {
       'oldPassword': '',

@@ -412,6 +412,8 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.read(localeProvider).languageCode;
     final ctrl = TextEditingController(text: _profile?['fullName'] ?? '');
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -421,6 +423,8 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       sheetAnimationStyle: _kSheetAnimationStyle,
       builder: (ctx) {
         bool saving = false;
+        final originalName = _profile?['fullName'] ?? '';
+        bool hasChanged = false;
         return StatefulBuilder(
           builder: (ctx, setSt) => Padding(
             padding: EdgeInsets.only(
@@ -456,24 +460,37 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                           : AppTheme.textPrimary),
                   decoration: InputDecoration(
                       labelText: AppStrings.get('full_name', locale)),
+                  onChanged: (val) => setSt(() => hasChanged = val.trim() != originalName.trim()),
                 ),
                 const SizedBox(height: 16),
-                _GradientButton(
-                  loading: saving,
-                  label: AppStrings.get('save', locale),
-                  onTap: () async {
-                    setSt(() => saving = true);
-                    try {
-                      await ref
-                          .read(clientRepositoryProvider)
-                          .updateProfile(fullName: ctrl.text.trim());
-                      await _load();
-                      if (mounted) Navigator.pop(ctx);
-                    } catch (_) {
-                      setSt(() => saving = false);
-                    }
-                  },
-                ),
+                hasChanged
+                    ? _GradientButton(
+                        loading: saving,
+                        label: AppStrings.get('save', locale),
+                        onTap: () async {
+                          setSt(() => saving = true);
+                          try {
+                            await ref
+                                .read(clientRepositoryProvider)
+                                .updateProfile(fullName: ctrl.text.trim());
+                            await _load();
+                            if (mounted) Navigator.pop(ctx);
+                          } catch (_) {
+                            setSt(() => saving = false);
+                          }
+                        },
+                      )
+                    : OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          side: BorderSide(color: border),
+                          foregroundColor: textSecondary,
+                        ),
+                        child: Text(AppStrings.get('close', locale),
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
               ],
             ),
           ),
@@ -485,147 +502,14 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   void _showChangePasswordSheet() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.read(localeProvider).languageCode;
-    final currentCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    bool obscure1 = true, obscure2 = true, obscure3 = true;
-    bool loading = false;
-    String? error;
-    bool success = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: _kSheetAnimationStyle,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) {
-          final surface = isDark ? AppTheme.darkSurface : Colors.white;
-          final textPrimary =
-              isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-          final textSecondary =
-              isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-          final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-          return Container(
-            decoration: BoxDecoration(
-              color: surface,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
-            child: success
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                          child: Container(
-                              width: 36,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                  color: border,
-                                  borderRadius: BorderRadius.circular(2)))),
-                      const SizedBox(height: 24),
-                      const Icon(Icons.check_circle,
-                          color: AppTheme.successColor, size: 48),
-                      const SizedBox(height: 16),
-                      Text(AppStrings.get('password_changed', locale),
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 24),
-                      _GradientButton(
-                          label: AppStrings.get('close', locale),
-                          onTap: () => Navigator.pop(ctx)),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                          child: Container(
-                              width: 36,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                  color: border,
-                                  borderRadius: BorderRadius.circular(2)))),
-                      const SizedBox(height: 16),
-                      Text(AppStrings.get('change_password', locale),
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary)),
-                      const SizedBox(height: 16),
-                      _PassField(
-                          controller: currentCtrl,
-                          label: AppStrings.get('current_password', locale),
-                          obscure: obscure1,
-                          isDark: isDark,
-                          onToggle: () => setSt(() => obscure1 = !obscure1)),
-                      const SizedBox(height: 10),
-                      _PassField(
-                          controller: newCtrl,
-                          label: AppStrings.get('new_password', locale),
-                          obscure: obscure2,
-                          isDark: isDark,
-                          onToggle: () => setSt(() => obscure2 = !obscure2)),
-                      const SizedBox(height: 10),
-                      _PassField(
-                          controller: confirmCtrl,
-                          label: AppStrings.get('confirm_password', locale),
-                          obscure: obscure3,
-                          isDark: isDark,
-                          onToggle: () => setSt(() => obscure3 = !obscure3)),
-                      if (error != null) ...[
-                        const SizedBox(height: 8),
-                        Text(error!,
-                            style: const TextStyle(
-                                color: AppTheme.errorColor, fontSize: 13)),
-                      ],
-                      const SizedBox(height: 16),
-                      _GradientButton(
-                        label: AppStrings.get('save', locale),
-                        loading: loading,
-                        onTap: () async {
-                          if (newCtrl.text.length < 6) {
-                            setSt(() => error =
-                                AppStrings.get('password_too_short', locale));
-                            return;
-                          }
-                          if (newCtrl.text != confirmCtrl.text) {
-                            setSt(() => error =
-                                AppStrings.get('password_mismatch', locale));
-                            return;
-                          }
-                          setSt(() {
-                            loading = true;
-                            error = null;
-                          });
-                          try {
-                            await ref
-                                .read(clientRepositoryProvider)
-                                .setPassword(newCtrl.text);
-                            setSt(() {
-                              loading = false;
-                              success = true;
-                            });
-                          } catch (e) {
-                            setSt(() {
-                              loading = false;
-                              error = 'Xatolik yuz berdi';
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-          );
-        },
+      builder: (ctx) => _ChangePasswordSheet(
+        isDark: isDark, locale: locale,
+        clientPhone: _profile?['user']?['phone'] ?? '',
       ),
     );
   }
@@ -976,6 +860,344 @@ class _PassField extends StatelessWidget {
           onPressed: onToggle,
         ),
       ),
+    );
+  }
+}
+
+// ===== PAROL O'ZGARTIRISH (driver_profile_screen.dart dagi
+// _ChangePasswordSheet bilan bir xil naqsh — joriy parolni bilgan holda
+// o'zgartirish, yoki "Parolni unutdingizmi?" orqali OTP bilan tiklash) =====
+class _ChangePasswordSheet extends ConsumerStatefulWidget {
+  final bool isDark;
+  final String locale;
+  final String clientPhone;
+  const _ChangePasswordSheet({required this.isDark, required this.locale, required this.clientPhone});
+  @override
+  ConsumerState<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
+  int _step = 0;
+  final _currentCtrl = TextEditingController();
+  final _newCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
+  bool _loading = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  String? _error;
+  bool _success = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneCtrl.text = widget.clientPhone.replaceFirst('+998', '').replaceAll(RegExp(r'\D'), '');
+    _otpCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _currentCtrl.dispose(); _newCtrl.dispose(); _confirmCtrl.dispose();
+    _phoneCtrl.dispose(); _otpCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _changePassword() async {
+    if (_newCtrl.text.length < 6) {
+      setState(() => _error = AppStrings.get('password_too_short', widget.locale));
+      return;
+    }
+    if (_newCtrl.text != _confirmCtrl.text) {
+      setState(() => _error = AppStrings.get('password_mismatch', widget.locale));
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(clientRepositoryProvider).changePassword(
+        oldPassword: _currentCtrl.text,
+        newPassword: _newCtrl.text,
+      );
+      setState(() { _success = true; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _sendForgotOtp() async {
+    final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+    if (rawPhone.length != 9) {
+      setState(() => _error = AppStrings.get('phone_incomplete_error', widget.locale));
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authRepositoryProvider).sendOtp('+998$rawPhone', 'CLIENT');
+      setState(() { _step = 2; _loading = false; });
+    } catch (e) {
+      setState(() { _error = AppStrings.get('generic_error', widget.locale); _loading = false; });
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    if (_otpCtrl.text.length != 6) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final rawPhone = _phoneCtrl.text.replaceAll(' ', '');
+      await ref.read(authRepositoryProvider).verifyResetOtp('+998$rawPhone', _otpCtrl.text);
+      setState(() { _step = 3; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = AppStrings.get('otp_invalid_error', widget.locale);
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _setNewPassword() async {
+    if (_newCtrl.text.length < 6) {
+      setState(() => _error = AppStrings.get('password_too_short', widget.locale));
+      return;
+    }
+    if (_newCtrl.text != _confirmCtrl.text) {
+      setState(() => _error = AppStrings.get('password_mismatch', widget.locale));
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authRepositoryProvider).resetPassword(
+        phone: '+998${_phoneCtrl.text.trim()}',
+        code: _otpCtrl.text,
+        newPassword: _newCtrl.text,
+      );
+      setState(() { _success = true; _loading = false; });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final locale = widget.locale;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: _success
+          ? Column(mainAxisSize: MainAxisSize.min, children: [
+              Center(child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 24),
+              const Icon(Icons.check_circle, color: AppTheme.successColor, size: 48),
+              const SizedBox(height: 16),
+              Text(AppStrings.get('password_changed', locale),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              _GradientButton(label: AppStrings.get('close', locale),
+                  onTap: () => Navigator.pop(context)),
+            ])
+          : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              if (_step == 0) ...[
+                Text(AppStrings.get('change_password', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 16),
+                _PassField(controller: _currentCtrl,
+                    label: AppStrings.get('current_password', locale),
+                    obscure: _obscureCurrent, isDark: isDark,
+                    onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent)),
+                const SizedBox(height: 10),
+                _PassField(controller: _newCtrl,
+                    label: AppStrings.get('new_password', locale),
+                    obscure: _obscureNew, isDark: isDark,
+                    onToggle: () => setState(() => _obscureNew = !_obscureNew)),
+                const SizedBox(height: 10),
+                _PassField(controller: _confirmCtrl,
+                    label: AppStrings.get('confirm_password', locale),
+                    obscure: _obscureConfirm, isDark: isDark,
+                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm)),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => setState(() { _step = 1; _error = null; }),
+                  child: Text(AppStrings.get('forgot_password', locale),
+                      style: const TextStyle(color: AppTheme.primaryColor, fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('save', locale),
+                    loading: _loading, onTap: _changePassword),
+              ],
+              if (_step == 1) ...[
+                Text(AppStrings.get('reset_password', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 8),
+                Text(AppStrings.get('reset_password_phone_prompt', locale),
+                    style: TextStyle(fontSize: 13, color: textSecondary)),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkBackground : AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                      decoration: BoxDecoration(border: Border(right: BorderSide(color: border))),
+                      child: const Row(children: [
+                        Text('🇺🇿', style: TextStyle(fontSize: 20)),
+                        SizedBox(width: 6),
+                        Text('+998', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(9),
+                          _PhoneNumberFormatter(),
+                        ],
+                        style: TextStyle(fontSize: 16, color: textPrimary, fontWeight: FontWeight.w600),
+                        decoration: const InputDecoration(
+                          hintText: '77 014 77 03',
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('send_code', locale),
+                    loading: _loading, onTap: _sendForgotOtp),
+              ],
+              if (_step == 2) ...[
+                Text(AppStrings.get('enter_otp', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 8),
+                Text('+998 ${_phoneCtrl.text} ${AppStrings.get('otp_sent', locale)}',
+                    style: TextStyle(fontSize: 13, color: textSecondary)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _otpCtrl,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700,
+                      color: textPrimary, letterSpacing: 8),
+                  decoration: const InputDecoration(counterText: ''),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          side: BorderSide(color: border),
+                          foregroundColor: textSecondary,
+                        ),
+                        child: Text(AppStrings.get('cancel', locale),
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _GradientButton(label: AppStrings.get('verify', locale),
+                          loading: _loading,
+                          onTap: _otpCtrl.text.length == 6 ? _verifyOtp : null),
+                    ),
+                  ],
+                ),
+              ],
+              if (_step == 3) ...[
+                Text(AppStrings.get('set_new_password', locale),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary)),
+                const SizedBox(height: 8),
+                Text(
+                  AppStrings.get('reset_password_otp_note', locale),
+                  style: TextStyle(fontSize: 12, color: textSecondary),
+                ),
+                const SizedBox(height: 16),
+                _PassField(controller: _newCtrl,
+                    label: AppStrings.get('new_password', locale),
+                    obscure: _obscureNew, isDark: isDark,
+                    onToggle: () => setState(() => _obscureNew = !_obscureNew)),
+                const SizedBox(height: 10),
+                _PassField(controller: _confirmCtrl,
+                    label: AppStrings.get('confirm_password', locale),
+                    obscure: _obscureConfirm, isDark: isDark,
+                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm)),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                ],
+                const SizedBox(height: 16),
+                _GradientButton(label: AppStrings.get('save', locale),
+                    loading: _loading, onTap: _setNewPassword),
+              ],
+            ]),
+    );
+  }
+}
+
+class _PhoneNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if (i == 1 || i == 4 || i == 6) {
+        if (i != digits.length - 1) buffer.write(' ');
+      }
+    }
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
