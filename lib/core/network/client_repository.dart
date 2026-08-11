@@ -211,6 +211,30 @@ class ClientRepository {
     return Map<String, dynamic>.from(res.data['data']);
   }
 
+  // Manzil qidiruv tarixi — SavedAddress'dan farqli, foydalanuvchi
+  // manzil tanlaganda AVTOMATIK yoziladi (qo'lda saqlash emas). Backend
+  // oxirgi 10 tasini eng yangisidan boshlab qaytaradi.
+  Future<List<Map<String, dynamic>>> getAddressHistory() async {
+    final res = await _dio.get('/address-history');
+    final list = res.data['data'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  // Fon rejimida chaqiriladi (manzil tanlanganda) — chaqiruvchi joyda
+  // xato jimgina e'tiborsiz qoldiriladi, foydalanuvchi ishiga xalaqit
+  // bermaydi.
+  Future<void> addAddressHistory({
+    required String address,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await _dio.post('/address-history', data: {
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+    });
+  }
+
   Future<void> updateSavedAddress(
     String id, {
     required String name,

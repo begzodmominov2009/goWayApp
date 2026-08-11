@@ -856,12 +856,18 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
   Timer? _debounce;
   final Set<String> _savedPlaceKeys = {};
 
+  // Qidiruv tarixi (GET /address-history) — modal ochilganda bir marta
+  // yuklanadi, input bo'sh bo'lganda "Saqlangan manzillar" bilan birga
+  // ko'rsatiladi.
+  List<Map<String, dynamic>> _history = [];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) FocusScope.of(context).requestFocus(_focus);
     });
+    _loadHistory();
   }
 
   @override
@@ -874,24 +880,68 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
 
   String _placeKey(Place p) => '${p.lat.toStringAsFixed(5)},${p.lng.toStringAsFixed(5)}';
 
+  Future<void> _loadHistory() async {
+    try {
+      final history = await ref.read(clientRepositoryProvider).getAddressHistory();
+      if (!mounted) return;
+      setState(() => _history = history);
+    } catch (_) {}
+  }
+
   void _onChanged(String val) {
     _debounce?.cancel();
-    if (val.isEmpty) {
+    if (val.trim().isEmpty) {
       setState(() => _results = []);
       return;
     }
     setState(() => _searching = true);
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      final repo = ref.read(geocodeRepositoryProvider);
-      final results = await repo.search(val, lat: widget.biasLat, lng: widget.biasLng);
-      if (!mounted) return;
-      setState(() {
-        _results = results
-            .map((r) => Place(name: r.name, address: r.address, lat: r.lat, lng: r.lng, distanceKm: r.distanceKm))
-            .toList();
-        _searching = false;
-      });
+    _debounce = Timer(const Duration(milliseconds: 500), () => _performSearch(val));
+  }
+
+  Future<void> _performSearch(String val) async {
+    if (val.trim().isEmpty) return;
+    _debounce?.cancel();
+    if (!_searching) setState(() => _searching = true);
+    final repo = ref.read(geocodeRepositoryProvider);
+    final results = await repo.search(val, lat: widget.biasLat, lng: widget.biasLng);
+    if (!mounted) return;
+    setState(() {
+      _results = results
+          .map((r) => Place(name: r.name, address: r.address, lat: r.lat, lng: r.lng, distanceKm: r.distanceKm))
+          .toList();
+      _searching = false;
     });
+  }
+
+  // Qidiruv natijasi, saqlangan manzil yoki tarixdan tanlanganda —
+  // fon rejimida qidiruv tarixiga yoziladi (xato bo'lsa jimgina
+  // e'tiborsiz qoldiriladi) va modal shu manzil bilan yopiladi.
+  void _selectPlace(Place place) {
+    unawaited(
+      ref.read(clientRepositoryProvider).addAddressHistory(
+            address: place.address.isNotEmpty ? place.address : place.name,
+            latitude: place.lat,
+            longitude: place.lng,
+          ).catchError((_) {}),
+    );
+    Navigator.pop(context, place);
+  }
+
+  Future<void> _openMapPicker() async {
+    final locale = ref.read(localeProvider).languageCode;
+    final result = await Navigator.push<Place>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => MapAddressPicker(
+          initialLat: widget.biasLat,
+          initialLng: widget.biasLng,
+          title: widget.isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
+          isFrom: widget.isFrom,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    Navigator.pop(context, result);
   }
 
   Future<void> _showQuickSaveDialog(Place place) async {
@@ -949,6 +999,9 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
+    final savedAddresses =
+        ref.watch(clientSavedAddressesCacheProvider).valueOrNull ?? const <Map<String, dynamic>>[];
+    final hasQuery = _ctrl.text.trim().isNotEmpty;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -1016,51 +1069,53 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                         focusedBorder: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
-                        suffixIcon: _ctrl.text.isNotEmpty
-                            ? IconButton(
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_ctrl.text.isNotEmpty)
+                              IconButton(
                                 icon: Icon(Icons.close, size: 16, color: textSecondary),
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                padding: EdgeInsets.zero,
                                 onPressed: () { _ctrl.clear(); setState(() => _results = []); },
-                              )
-                            : null,
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.map_outlined, size: 18, color: AppTheme.primaryColor),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              padding: EdgeInsets.zero,
+                              onPressed: _openMapPicker,
+                            ),
+                          ],
+                        ),
+                        // Standart 48x48 minimal maydonni bekor qiladi —
+                        // aks holda Row ikkita IconButton bilan 44px
+                        // balandlikdagi konteynerdan chiqib ketib, RenderFlex
+                        // overflow ogohlantirishiga olib kelishi mumkin edi.
+                        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: _searching
-                      ? const Center(child: AppLoadingIndicator(strokeWidth: 2))
-                      : (_results.isEmpty
-                          ? (_ctrl.text.isEmpty
-                              ? const SizedBox.shrink()
-                              : Center(child: Text(AppStrings.get('no_results_found', locale), style: TextStyle(color: textSecondary))))
-                          : ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: _results.length,
-                              itemBuilder: (ctx, i) {
-                                final place = _results[i];
-                                return Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () => Navigator.pop(context, place),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      decoration: BoxDecoration(
-                                        border: Border(bottom: BorderSide(color: border, width: 0.5)),
-                                      ),
-                                      child: Row(children: [
-                                        Container(width: 32, height: 32,
-                                          decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
-                                          child: const Icon(Icons.location_on_outlined, size: 16, color: AppTheme.primaryColor)),
-                                        const SizedBox(width: 10),
-                                        Expanded(child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(place.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                            if (place.address.isNotEmpty && place.address != place.name)
-                                              Text(place.address, style: TextStyle(fontSize: 11, color: textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                          ],
-                                        )),
+                  child: !hasQuery
+                      ? _buildSuggestions(savedAddresses, textPrimary, textSecondary, border, locale)
+                      : (_searching
+                          ? const Center(child: AppLoadingIndicator(strokeWidth: 2))
+                          : (_results.isEmpty
+                              ? Center(child: Text(AppStrings.get('no_results_found', locale), style: TextStyle(color: textSecondary)))
+                              : ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _results.length,
+                                  itemBuilder: (ctx, i) {
+                                    final place = _results[i];
+                                    return _AddressResultTile(
+                                      place: place,
+                                      icon: Icons.location_on_outlined,
+                                      iconColor: AppTheme.primaryColor,
+                                      textPrimary: textPrimary, textSecondary: textSecondary, border: border,
+                                      onTap: () => _selectPlace(place),
+                                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                                         if (place.distanceKm != null)
                                           Container(
                                             margin: const EdgeInsets.only(left: 8),
@@ -1085,15 +1140,144 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                                           onPressed: () => _showQuickSaveDialog(place),
                                         ),
                                       ]),
-                                    ),
-                                  ),
-                                );
-                              },
-                            )),
+                                    );
+                                  },
+                                ))),
+                ),
+                Container(
+                  padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    border: Border(top: BorderSide(color: border)),
+                  ),
+                  child: hasQuery
+                      ? _GradBtn(
+                          label: AppStrings.get('search_btn', locale),
+                          onTap: () => _performSearch(_ctrl.text),
+                        )
+                      : OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            side: BorderSide(color: border),
+                            foregroundColor: textSecondary,
+                          ),
+                          child: Text(AppStrings.get('close', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // "Saqlangan manzillar" va "Qidiruv tarixi" — ikkalasi ham aniq
+  // sarlavha bilan, faqat mos ro'yxat bo'sh bo'lmaganda ko'rsatiladi.
+  Widget _buildSuggestions(
+    List<Map<String, dynamic>> savedAddresses,
+    Color textPrimary, Color textSecondary, Color border,
+    String locale,
+  ) {
+    if (savedAddresses.isEmpty && _history.isEmpty) return const SizedBox.shrink();
+
+    Place savedToPlace(Map<String, dynamic> item) => Place(
+          name: item['name'] as String? ?? '',
+          address: item['address'] as String? ?? '',
+          lat: (item['latitude'] as num).toDouble(),
+          lng: (item['longitude'] as num).toDouble(),
+        );
+    Place historyToPlace(Map<String, dynamic> item) => Place(
+          name: item['address'] as String? ?? '',
+          address: '',
+          lat: (item['latitude'] as num).toDouble(),
+          lng: (item['longitude'] as num).toDouble(),
+        );
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        if (savedAddresses.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Text(AppStrings.get('saved_places', locale),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
+          ),
+          ...savedAddresses.map((item) => _AddressResultTile(
+                place: savedToPlace(item),
+                icon: Icons.bookmark,
+                iconColor: AppTheme.primaryColor,
+                textPrimary: textPrimary, textSecondary: textSecondary, border: border,
+                onTap: () => _selectPlace(savedToPlace(item)),
+              )),
+        ],
+        if (savedAddresses.isNotEmpty && _history.isNotEmpty)
+          Divider(height: 24, thickness: 1, color: border),
+        if (_history.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Text(AppStrings.get('search_history_title', locale),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
+          ),
+          ..._history.map((item) => _AddressResultTile(
+                place: historyToPlace(item),
+                icon: Icons.history,
+                iconColor: textSecondary,
+                textPrimary: textPrimary, textSecondary: textSecondary, border: border,
+                onTap: () => _selectPlace(historyToPlace(item)),
+              )),
+        ],
+      ],
+    );
+  }
+}
+
+/// Manzil qatori — qidiruv natijalari, saqlangan manzillar va qidiruv
+/// tarixi bo'limlarida bir xil ko'rinish uchun ishlatiladi.
+class _AddressResultTile extends StatelessWidget {
+  final Place place;
+  final IconData icon;
+  final Color iconColor;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color border;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  const _AddressResultTile({
+    required this.place, required this.icon, required this.iconColor,
+    required this.textPrimary, required this.textSecondary, required this.border,
+    required this.onTap, this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: border, width: 0.5)),
+          ),
+          child: Row(children: [
+            Container(width: 32, height: 32,
+              decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, size: 16, color: iconColor)),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(place.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (place.address.isNotEmpty && place.address != place.name)
+                  Text(place.address, style: TextStyle(fontSize: 11, color: textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            )),
+            if (trailing != null) trailing!,
+          ]),
         ),
       ),
     );
