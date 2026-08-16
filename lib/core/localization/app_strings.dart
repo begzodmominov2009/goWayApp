@@ -110,6 +110,10 @@ class AppStrings {
       // ==== Client Home ====
       'menu': 'Menyu',
       'my_orders': 'Buyurtmalarim',
+      'my_active_orders': 'Faol buyurtmalarim',
+      'my_scheduled_orders': 'Rejalashtirilgan buyurtmalarim',
+      'live_tracking': 'Jonli kuzatish',
+      'no_active_orders': 'Hozircha faol buyurtma yo\'q',
       'enter_address': 'Manzil kiriting',
       'place_order': 'Buyurtma berish',
       'cancel_selection': 'Bekor qilish',
@@ -587,6 +591,10 @@ class AppStrings {
       // ==== Client Home ====
       'menu': 'Меню',
       'my_orders': 'Мои заказы',
+      'my_active_orders': 'Активные заказы',
+      'my_scheduled_orders': 'Мои запланированные заказы',
+      'live_tracking': 'Живое отслеживание',
+      'no_active_orders': 'Пока нет активных заказов',
       'enter_address': 'Введите адрес',
       'place_order': 'Оформить заказ',
       'cancel_selection': 'Отмена',
@@ -1064,6 +1072,10 @@ class AppStrings {
       // ==== Client Home ====
       'menu': 'Menu',
       'my_orders': 'My orders',
+      'my_active_orders': 'My active orders',
+      'my_scheduled_orders': 'My scheduled orders',
+      'live_tracking': 'Live tracking',
+      'no_active_orders': 'No active orders yet',
       'enter_address': 'Enter address',
       'place_order': 'Place order',
       'cancel_selection': 'Cancel',

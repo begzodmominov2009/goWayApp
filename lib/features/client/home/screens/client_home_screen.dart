@@ -496,6 +496,58 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                       children: [
                         GestureDetector(
                           onTap: _openMenu,
+                          child: Container(
+                            width: 46, height: 46,
+                            decoration: BoxDecoration(
+                              color: surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: border, width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(Icons.menu, color: textPrimary, size: 23),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Joriy manzil — Yandex Go uslubida: kartochka/tugma
+                        // emas, xarita ustida o'qilishi uchun juda yengil
+                        // fon bilan sof matn. Bosilganda hech narsa
+                        // bo'lmaydi (gesture handleri yo'q).
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: surface.withOpacity(isDark ? 0.55 : 0.7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.location_on, color: AppTheme.primaryColor, size: 15),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    _currentAddressLabel.isNotEmpty ? _currentAddressLabel : 'GoWay',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () async {
+                            await context.push(AppRoutes.notifications);
+                            if (mounted) _loadUnreadNotifCount();
+                          },
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
@@ -513,7 +565,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                                     ),
                                   ],
                                 ),
-                                child: Icon(Icons.menu, color: textPrimary, size: 23),
+                                child: Icon(Icons.notifications_outlined, color: textPrimary, size: 22),
                               ),
                               if (_unreadNotifCount > 0)
                                 Positioned(
@@ -527,63 +579,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                                       border: Border.all(color: surface, width: 1.5),
                                     ),
                                     child: Text(
-                                      _unreadNotifCount > 9 ? '9+' : '$_unreadNotifCount',
+                                      _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
                                   ),
                                 ),
                             ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: surface,
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(color: border, width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.10),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 34, height: 34,
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.route_rounded, color: Colors.white, size: 17),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        AppStrings.get('current_location_label', locale),
-                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.2),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _currentAddressLabel.isNotEmpty ? _currentAddressLabel : 'GoWay',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                         ),
                       ],

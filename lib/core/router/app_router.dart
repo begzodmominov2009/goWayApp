@@ -11,6 +11,8 @@ import '../../features/auth/screens/driver_register_screen.dart';
 import '../../features/auth/screens/client_register_screen.dart';
 import '../../features/client/home/screens/client_home_screen.dart';
 import '../../features/client/order/screens/client_orders_screen.dart';
+import '../../features/client/order/screens/client_scheduled_orders_screen.dart';
+import '../../features/client/order/screens/client_active_orders_screen.dart';
 import '../../features/client/order/screens/order_detail_screen.dart';
 import '../../features/client/order/screens/select_address_screen.dart';
 import '../../features/client/order/screens/order_details_screen.dart';
@@ -57,6 +59,8 @@ class AppRoutes {
   static const clientOrderDetails = '/client/order-details';
   static const clientActiveOrderDetails = '/client/active-order-details';
   static const clientSavedAddresses = '/client/saved-addresses';
+  static const clientScheduledOrders = '/client/scheduled-orders';
+  static const clientActiveOrders = '/client/active-orders';
 
   static const driverHome = '/driver/home';
   static const driverOrderDetail = '/driver/order/:id';
@@ -267,6 +271,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.clientSavedAddresses,
         pageBuilder: (context, state) => _slidePage(const SavedAddressesScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.clientScheduledOrders,
+        pageBuilder: (context, state) => _slidePage(const ClientScheduledOrdersScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.clientActiveOrders,
+        pageBuilder: (context, state) => _slidePage(const ClientActiveOrdersScreen(), state),
       ),
 
       // Driver

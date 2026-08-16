@@ -4,9 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/network/auth_repository.dart';
-import '../../../../core/network/notification_repository.dart';
-import '../../../../core/providers/active_order_provider.dart';
 import '../../../../core/router/app_router.dart';
 
 class ClientMenuSheet extends ConsumerStatefulWidget {
@@ -17,26 +14,10 @@ class ClientMenuSheet extends ConsumerStatefulWidget {
 }
 
 class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
-  int _unreadCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUnreadCount();
-  }
-
-  Future<void> _loadUnreadCount() async {
-    try {
-      final count = await ref.read(notificationRepositoryProvider).getUnreadCount();
-      if (mounted) setState(() => _unreadCount = count);
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
-    final activeOrder = ref.watch(activeOrderProvider);
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
 
@@ -53,23 +34,6 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
               decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 12),
 
-          if (activeOrder != null)
-            _MenuTile(
-              icon: Icons.local_shipping_outlined,
-              label: AppStrings.get('active_order', locale),
-              isDark: isDark,
-              onTap: () {
-                Navigator.pop(context);
-                context.push(
-                  AppRoutes.clientActiveOrderDetails,
-                  extra: {
-                    'order': activeOrder.order,
-                    'distKm': activeOrder.distKm,
-                    'timeMin': activeOrder.timeMin,
-                  },
-                );
-              },
-            ),
           _MenuTile(
             icon: Icons.receipt_long_outlined,
             label: AppStrings.get('my_orders', locale),
@@ -80,22 +44,21 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
             },
           ),
           _MenuTile(
-            icon: Icons.notifications_outlined,
-            label: AppStrings.get('notifications', locale),
-            badgeCount: _unreadCount,
+            icon: Icons.local_shipping_outlined,
+            label: AppStrings.get('my_active_orders', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
-              context.push(AppRoutes.notifications);
+              context.push(AppRoutes.clientActiveOrders);
             },
           ),
           _MenuTile(
-            icon: Icons.person_outline,
-            label: AppStrings.get('profile', locale),
+            icon: Icons.event_note_outlined,
+            label: AppStrings.get('my_scheduled_orders', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
-              context.push(AppRoutes.clientProfile);
+              context.push(AppRoutes.clientScheduledOrders);
             },
           ),
           _MenuTile(
@@ -108,21 +71,12 @@ class _ClientMenuSheetState extends ConsumerState<ClientMenuSheet> {
             },
           ),
           _MenuTile(
-            icon: Icons.feedback_outlined,
-            label: AppStrings.get('feedback', locale),
+            icon: Icons.person_outline,
+            label: AppStrings.get('profile', locale),
             isDark: isDark,
             onTap: () {
               Navigator.pop(context);
-              context.push(AppRoutes.feedback);
-            },
-          ),
-          _MenuTile(
-            icon: Icons.help_outline,
-            label: AppStrings.get('faq', locale),
-            isDark: isDark,
-            onTap: () {
-              Navigator.pop(context);
-              context.push(AppRoutes.faq);
+              context.push(AppRoutes.clientProfile);
             },
           ),
         ],

@@ -13,7 +13,13 @@ final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   reverseDuration: const Duration(milliseconds: 320),
 );
 
-enum _FilterType { all, pending, accepted, cancelled }
+enum _FilterType { all, accepted, cancelled }
+
+// "Buyurtmalarim" endi faqat YAKUNLANGAN buyurtmalar tarixi — kutilayotgan
+// (SEARCHING/SCHEDULED) va faol (ACCEPTED va undan keyingi) buyurtmalar
+// endi o'z alohida sahifalariga ega (ClientScheduledOrdersScreen,
+// ClientActiveOrdersScreen).
+const List<String> _kHistoryStatuses = ['COMPLETED', 'DELIVERED', 'CANCELLED'];
 
 class ClientOrdersScreen extends ConsumerStatefulWidget {
   const ClientOrdersScreen({super.key});
@@ -23,9 +29,12 @@ class ClientOrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
-  // Buyurtmalar tarixi endi keshdan (clientOrdersHistoryCacheProvider) o'qiladi.
-  List<Map<String, dynamic>> get _orders =>
-      ref.read(clientOrdersHistoryCacheProvider).valueOrNull ?? const [];
+  // Buyurtmalar tarixi keshdan (clientOrdersHistoryCacheProvider) o'qiladi,
+  // faqat yakunlangan/bekor qilingan holatlar shu yerda ko'rsatiladi.
+  List<Map<String, dynamic>> get _orders {
+    final all = ref.read(clientOrdersHistoryCacheProvider).valueOrNull ?? const [];
+    return all.where((o) => _kHistoryStatuses.contains(o['status'] as String? ?? '')).toList();
+  }
 
   _FilterType _filter = _FilterType.all;
   final _searchCtrl = TextEditingController();
@@ -52,13 +61,12 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
     await ref.read(clientOrdersHistoryCacheProvider.notifier).forceRefresh();
   }
 
-  // Backend statuslarini 3 ta guruhga ajratish
+  // Backend statuslarini guruhga ajratish — endi faqat 2 ta yakuniy guruh
+  // qoladi (kutilayotgan/faol holatlar bu sahifada umuman ko'rinmaydi).
   bool _matchesFilter(String status) {
     switch (_filter) {
       case _FilterType.all:
         return true;
-      case _FilterType.pending:
-        return ['SEARCHING', 'OFFERED', 'ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status);
       case _FilterType.accepted:
         return ['DELIVERED', 'COMPLETED'].contains(status);
       case _FilterType.cancelled:
@@ -151,7 +159,6 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
   String _filterLabel(_FilterType f, String locale) {
     switch (f) {
       case _FilterType.all: return AppStrings.get('filter_all', locale);
-      case _FilterType.pending: return AppStrings.get('filter_pending', locale);
       case _FilterType.accepted: return AppStrings.get('filter_delivered', locale);
       case _FilterType.cancelled: return AppStrings.get('filter_cancelled', locale);
     }
