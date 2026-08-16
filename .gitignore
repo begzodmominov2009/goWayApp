@@ -46,3 +46,4 @@ app.*.map.json
 .claude/worktrees/
 diff.txt
 diff.txt
+*.txt
