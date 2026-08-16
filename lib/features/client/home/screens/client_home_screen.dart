@@ -311,6 +311,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
           toPlace: result['toPlace'] as Place,
           truckType: result['truckType'] as String,
           weight: result['weight'] as double,
+          loadType: result['loadType'] as String?,
           cargoType: result['cargoType'] as String?,
           note: result['note'] as String?,
           isScheduled: result['isScheduled'] as bool,

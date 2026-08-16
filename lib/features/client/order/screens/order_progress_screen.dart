@@ -10,6 +10,7 @@ import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/utils/address_helper.dart';
 import '../../../../core/utils/map_icon_helper.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
+import '../../../../shared/widgets/close_circle_button.dart';
 import '../../../../shared/widgets/place.dart';
 import 'active_order_details_screen.dart';
 
@@ -35,6 +36,7 @@ class OrderProgressScreen extends ConsumerStatefulWidget {
   final Place toPlace;
   final String truckType;
   final double weight;
+  final String? loadType;
   final String? cargoType;
   final String? note;
   final bool isScheduled;
@@ -48,6 +50,7 @@ class OrderProgressScreen extends ConsumerStatefulWidget {
     required this.toPlace,
     required this.truckType,
     required this.weight,
+    this.loadType,
     this.cargoType,
     this.note,
     required this.isScheduled,
@@ -202,6 +205,7 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
         fromLatitude: widget.fromPlace.lat, fromLongitude: widget.fromPlace.lng,
         toLatitude: widget.toPlace.lat, toLongitude: widget.toPlace.lng,
         truckType: widget.truckType, weight: widget.weight,
+        loadType: widget.loadType,
         cargoType: widget.cargoType, note: widget.note,
         priority: 'STANDARD', isScheduled: widget.isScheduled,
         scheduledFor: widget.scheduledFor,
@@ -248,6 +252,7 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
         toPlace: widget.toPlace,
         truckType: widget.truckType,
         weight: widget.weight,
+        loadType: widget.loadType,
         distKm: (created['distance'] as num?)?.toDouble() ?? _currentDistKm,
         price: (created['price'] as num?)?.toDouble(),
         locale: locale,
@@ -656,6 +661,7 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
   final Place toPlace;
   final String truckType;
   final double weight;
+  final String? loadType;
   final double? distKm;
   final double? price;
   final String locale;
@@ -666,10 +672,22 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
     required this.toPlace,
     required this.truckType,
     required this.weight,
+    this.loadType,
     required this.distKm,
     required this.price,
     required this.locale,
   });
+
+  String? get _loadTypeLabel {
+    switch (loadType) {
+      case 'TOP':
+        return AppStrings.get('load_from_top', locale);
+      case 'BACK':
+        return AppStrings.get('load_from_back', locale);
+      default:
+        return null;
+    }
+  }
 
   String get _dateTimeLabel {
     final now = DateTime.now();
@@ -706,11 +724,27 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Center(child: Container(
-                  width: 36, height: 4,
-                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
-                )),
-                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+                      ),
+                      Positioned(
+                        right: 12, top: 8,
+                        child: CloseCircleButton(
+                          bg: cardBg, iconColor: textSecondary,
+                          onTap: () => Navigator.pop(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Container(
                   width: 56, height: 56,
                   decoration: BoxDecoration(color: AppTheme.successColor.withOpacity(0.12), shape: BoxShape.circle),
@@ -766,6 +800,8 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
                       Row(children: [
                         Expanded(child: _TicketStat(label: AppStrings.get('truck_type', locale), value: truckType)),
                         Expanded(child: _TicketStat(label: AppStrings.get('weight_label', locale), value: '$weight t')),
+                        if (_loadTypeLabel != null)
+                          Expanded(child: _TicketStat(label: AppStrings.get('load_type_label', locale), value: _loadTypeLabel!)),
                       ]),
                       if (distKm != null || price != null) ...[
                         const SizedBox(height: 14),

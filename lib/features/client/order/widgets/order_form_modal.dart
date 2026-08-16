@@ -9,6 +9,7 @@ import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
+import '../../../../shared/widgets/close_circle_button.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
 import '../../../../shared/widgets/place.dart';
 
@@ -26,9 +27,10 @@ final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
 /// birlashtirilgan. Ekranning ~85% balandligini egallaydi.
 ///
 /// Natija (Tasdiqlash bosilganda): {'fromPlace': Place, 'toPlace': Place,
-/// 'truckType': String, 'weight': double, 'cargoType': String?,
-/// 'note': String?, 'isScheduled': bool, 'scheduledFor': DateTime?,
-/// 'distKm': double?, 'timeMin': int?} — yoki null (modal yopilsa).
+/// 'truckType': String, 'weight': double, 'loadType': String ('TOP'|'BACK'),
+/// 'cargoType': String?, 'note': String?, 'isScheduled': bool,
+/// 'scheduledFor': DateTime?, 'distKm': double?, 'timeMin': int?} — yoki
+/// null (modal yopilsa).
 Future<Map<String, dynamic>?> showOrderFormModal(
   BuildContext context, {
   Place? initialFrom,
@@ -93,6 +95,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
 
   String? _selectedTruck;
   double? _selectedWeight;
+  String? _selectedLoadType;
   bool _isScheduled = false;
   bool _isTomorrow = false;
   int? _selectedHour;
@@ -327,6 +330,10 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
       _showValidationError(AppStrings.get('enter_cargo_type_error', locale));
       return;
     }
+    if (_selectedLoadType == null) {
+      _showValidationError(AppStrings.get('select_load_type_error', locale));
+      return;
+    }
     if (_isScheduled && (_selectedHour == null || _selectedMinute == null)) {
       _showValidationError(AppStrings.get('select_time_error', locale));
       return;
@@ -350,6 +357,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
       'toPlace': _toPlace,
       'truckType': _selectedTruck,
       'weight': _selectedWeight,
+      'loadType': _selectedLoadType,
       'cargoType': _cargoTypeCtrl.text.trim().isEmpty ? null : _cargoTypeCtrl.text.trim(),
       'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       'isScheduled': _isScheduled,
@@ -447,7 +455,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                   ),
                   Positioned(
                     right: 12, top: 8,
-                    child: _CloseCircleBtn(
+                    child: CloseCircleButton(
                       bg: tabBg, iconColor: textSecondary,
                       onTap: () => Navigator.pop(context),
                     ),
@@ -586,269 +594,292 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _routeLoading
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2)),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _routeLoading
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 10),
+                                    child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2)),
+                                  ),
+                                )
+                              : (_currentDistKm != null
+                                  ? Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: tabBg,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                        const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
+                                        const SizedBox(width: 7),
+                                        Text('${_currentDistKm!.toStringAsFixed(1)} km',
+                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                                        if (_currentTimeMin != null) ...[
+                                          Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
+                                          Icon(Icons.access_time, size: 14, color: textSecondary),
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            _currentTimeMin! >= 60
+                                                ? '${_currentTimeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${_currentTimeMin! % 60}${AppStrings.get('route_time_min', locale)}'
+                                                : '$_currentTimeMin ${AppStrings.get('route_time_min', locale)}',
+                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+                                          ),
+                                        ],
+                                      ]),
+                                    )
+                                  : const SizedBox.shrink()),
+                          if (!_routeLoading && _currentDistKm != null) ...[
+                            const SizedBox(height: 6),
+                            Text(AppStrings.get('auto_calculated_hint', locale),
+                                style: TextStyle(fontSize: 11, color: textSecondary)),
+                            const SizedBox(height: 14),
+                          ],
+
+                          Row(children: [
+                            Text(AppStrings.get('select_vehicle', locale),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(AppStrings.get('vehicle_help_text', locale))),
+                                );
+                              },
                             ),
-                          )
-                        : (_currentDistKm != null
-                            ? Container(
+                          ]),
+                          const SizedBox(height: 10),
+
+                          trucksLoading
+                              ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
+                              : GestureDetector(
+                                  onTap: _showTruckPicker,
+                                  child: Container(
+                                    width: double.infinity,
+                                    height: 50,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    decoration: BoxDecoration(
+                                      color: bg,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: border),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (selectedTruckData != null) ...[
+                                          _TruckThumbnail(
+                                            imageUrl: selectedTruckData['imageUrl'] as String?,
+                                            size: 32, radius: 10,
+                                            bg: bg, iconColor: textSecondary,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              selectedTruckData['name'] as String? ?? _selectedTruck!,
+                                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
+                                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ] else
+                                          Expanded(
+                                            child: Text(
+                                              AppStrings.get('select_vehicle_hint', locale),
+                                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary),
+                                            ),
+                                          ),
+                                        Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                          const SizedBox(height: 16),
+
+                          Row(children: [
+                            Text(AppStrings.get('weight_tons', locale),
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(AppStrings.get('weight_help_text', locale))),
+                                );
+                              },
+                            ),
+                          ]),
+                          const SizedBox(height: 8),
+                          Opacity(
+                            opacity: _selectedTruck == null ? 0.6 : 1.0,
+                            child: GestureDetector(
+                              onTap: () {
+                                if (_selectedTruck == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(AppStrings.get('select_truck_first_warning', locale)),
+                                      backgroundColor: AppTheme.warningColor,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                _showWeightPicker();
+                              },
+                              child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                height: 50,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
                                 decoration: BoxDecoration(
-                                  color: tabBg,
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: border),
                                 ),
-                                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
-                                  const SizedBox(width: 7),
-                                  Text('${_currentDistKm!.toStringAsFixed(1)} km',
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                  if (_currentTimeMin != null) ...[
-                                    Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
-                                    Icon(Icons.access_time, size: 14, color: textSecondary),
-                                    const SizedBox(width: 5),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
                                     Text(
-                                      _currentTimeMin! >= 60
-                                          ? '${_currentTimeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${_currentTimeMin! % 60}${AppStrings.get('route_time_min', locale)}'
-                                          : '$_currentTimeMin ${AppStrings.get('route_time_min', locale)}',
-                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+                                      _selectedWeight != null
+                                          ? '${_selectedWeight!.toStringAsFixed(1)} t'
+                                          : AppStrings.get('select_weight_hint', locale),
+                                      style: TextStyle(
+                                        fontSize: 14, fontWeight: FontWeight.w600,
+                                        color: _selectedWeight != null ? textPrimary : textSecondary,
+                                      ),
                                     ),
+                                    Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
                                   ],
-                                ]),
-                              )
-                            : const SizedBox.shrink()),
-                    if (!_routeLoading && _currentDistKm != null) ...[
-                      const SizedBox(height: 6),
-                      Text(AppStrings.get('auto_calculated_hint', locale),
-                          style: TextStyle(fontSize: 11, color: textSecondary)),
-                      const SizedBox(height: 14),
-                    ],
-
-                    Row(children: [
-                      Text(AppStrings.get('select_vehicle', locale),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary)),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(AppStrings.get('vehicle_help_text', locale))),
-                          );
-                        },
-                      ),
-                    ]),
-                    const SizedBox(height: 10),
-
-                    trucksLoading
-                        ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
-                        : GestureDetector(
-                            onTap: _showTruckPicker,
-                            child: Container(
-                              width: double.infinity,
-                              height: 50,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: bg,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: border),
-                              ),
-                              child: Row(
-                                children: [
-                                  if (selectedTruckData != null) ...[
-                                    _TruckThumbnail(
-                                      imageUrl: selectedTruckData['imageUrl'] as String?,
-                                      size: 32, radius: 10,
-                                      bg: bg, iconColor: textSecondary,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        selectedTruckData['name'] as String? ?? _selectedTruck!,
-                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ] else
-                                    Expanded(
-                                      child: Text(
-                                        AppStrings.get('select_vehicle_hint', locale),
-                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary),
-                                      ),
-                                    ),
-                                  Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
-                                ],
+                                ),
                               ),
                             ),
                           ),
-                    const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                    Row(children: [
-                      Text(AppStrings.get('weight_tons', locale),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(AppStrings.get('weight_help_text', locale))),
-                          );
-                        },
-                      ),
-                    ]),
-                    const SizedBox(height: 8),
-                    Opacity(
-                      opacity: _selectedTruck == null ? 0.6 : 1.0,
-                      child: GestureDetector(
-                        onTap: () {
-                          if (_selectedTruck == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(AppStrings.get('select_truck_first_warning', locale)),
-                                backgroundColor: AppTheme.warningColor,
-                              ),
-                            );
-                            return;
-                          }
-                          _showWeightPicker();
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          height: 50,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: border),
+                          Text(AppStrings.get('cargo_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _cargoTypeCtrl,
+                            maxLines: 1,
+                            style: TextStyle(fontSize: 13, color: textPrimary),
+                            decoration: InputDecoration(hintText: AppStrings.get('cargo_type_hint', locale), hintStyle: TextStyle(color: textSecondary)),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _selectedWeight != null
-                                    ? '${_selectedWeight!.toStringAsFixed(1)} t'
-                                    : AppStrings.get('select_weight_hint', locale),
-                                style: TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w600,
-                                  color: _selectedWeight != null ? textPrimary : textSecondary,
+                          const SizedBox(height: 16),
+
+                          Text(AppStrings.get('load_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(
+                              child: _TimeTab(
+                                label: AppStrings.get('load_from_top', locale),
+                                selected: _selectedLoadType == 'TOP',
+                                bg: tabBg, textPrimary: textPrimary,
+                                onTap: () => setState(() => _selectedLoadType = 'TOP'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _TimeTab(
+                                label: AppStrings.get('load_from_back', locale),
+                                selected: _selectedLoadType == 'BACK',
+                                bg: tabBg, textPrimary: textPrimary,
+                                onTap: () => setState(() => _selectedLoadType = 'BACK'),
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 16),
+
+                          Text(AppStrings.get('order_when_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(
+                              child: _TimeTab(
+                                label: AppStrings.get('order_type_now', locale),
+                                selected: !_isScheduled,
+                                bg: tabBg, textPrimary: textPrimary,
+                                onTap: _selectNow,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _TimeTab(
+                                label: AppStrings.get('order_type_today', locale),
+                                selected: _isScheduled && !_isTomorrow,
+                                bg: tabBg, textPrimary: textPrimary,
+                                onTap: () => _selectScheduled(false),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _TimeTab(
+                                label: AppStrings.get('order_type_tomorrow', locale),
+                                selected: _isScheduled && _isTomorrow,
+                                bg: tabBg, textPrimary: textPrimary,
+                                onTap: () => _selectScheduled(true),
+                              ),
+                            ),
+                          ]),
+                          if (_isScheduled) ...[
+                            const SizedBox(height: 14),
+                            GestureDetector(
+                              onTap: _showTimePicker,
+                              child: Container(
+                                width: double.infinity,
+                                height: 50,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: border),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      (_selectedHour != null && _selectedMinute != null)
+                                          ? '${_selectedHour!.toString().padLeft(2, '0')}:${_selectedMinute!.toString().padLeft(2, '0')}'
+                                          : AppStrings.get('select_time_hint', locale),
+                                      style: TextStyle(
+                                        fontSize: 14, fontWeight: FontWeight.w600,
+                                        color: (_selectedHour != null && _selectedMinute != null) ? textPrimary : textSecondary,
+                                      ),
+                                    ),
+                                    Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
+                                  ],
                                 ),
                               ),
-                              Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
 
-                    Text(AppStrings.get('cargo_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _cargoTypeCtrl,
-                      maxLines: 1,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(hintText: AppStrings.get('cargo_type_hint', locale), hintStyle: TextStyle(color: textSecondary)),
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(AppStrings.get('order_when_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Expanded(
-                        child: _TimeTab(
-                          label: AppStrings.get('order_type_now', locale),
-                          selected: !_isScheduled,
-                          bg: tabBg, textPrimary: textPrimary,
-                          onTap: _selectNow,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _TimeTab(
-                          label: AppStrings.get('order_type_today', locale),
-                          selected: _isScheduled && !_isTomorrow,
-                          bg: tabBg, textPrimary: textPrimary,
-                          onTap: () => _selectScheduled(false),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _TimeTab(
-                          label: AppStrings.get('order_type_tomorrow', locale),
-                          selected: _isScheduled && _isTomorrow,
-                          bg: tabBg, textPrimary: textPrimary,
-                          onTap: () => _selectScheduled(true),
-                        ),
-                      ),
-                    ]),
-                    if (_isScheduled) ...[
-                      const SizedBox(height: 14),
-                      GestureDetector(
-                        onTap: _showTimePicker,
-                        child: Container(
-                          width: double.infinity,
-                          height: 50,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: border),
+                          TextField(
+                            controller: _noteCtrl,
+                            maxLines: 1,
+                            style: TextStyle(fontSize: 13, color: textPrimary),
+                            decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                (_selectedHour != null && _selectedMinute != null)
-                                    ? '${_selectedHour!.toString().padLeft(2, '0')}:${_selectedMinute!.toString().padLeft(2, '0')}'
-                                    : AppStrings.get('select_time_hint', locale),
-                                style: TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w600,
-                                  color: (_selectedHour != null && _selectedMinute != null) ? textPrimary : textSecondary,
-                                ),
+                          if (_priceLoading) ...[
+                            const SizedBox(height: 16),
+                            const Center(
+                              child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2.5)),
+                            ),
+                          ] else if (_calculatedPrice != null) ...[
+                            const SizedBox(height: 16),
+                            Center(
+                              child: Text(
+                                '${AppStrings.get('estimated_price_label', locale)}: ${_calculatedPrice!.toStringAsFixed(0)} so\'m',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor),
                               ),
-                              Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: textSecondary),
-                            ],
-                          ),
-                        ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: _noteCtrl,
-                      maxLines: 1,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
                     ),
-                    if (_priceLoading) ...[
-                      const SizedBox(height: 16),
-                      const Center(
-                        child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2.5)),
-                      ),
-                    ] else if (_calculatedPrice != null) ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          '${AppStrings.get('estimated_price_label', locale)}: ${_calculatedPrice!.toStringAsFixed(0)} so\'m',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.primaryColor),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
-                    ],
-                  ),
-                ),
-              ),
+            ),
 
             // Doimiy "Tasdiqlash" tugmasi
             Container(
@@ -1078,7 +1109,7 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                       ),
                       Positioned(
                         right: 12, top: 8,
-                        child: _CloseCircleBtn(
+                        child: CloseCircleButton(
                           bg: tabBg, iconColor: textSecondary,
                           onTap: () => Navigator.pop(context),
                         ),
@@ -1336,29 +1367,6 @@ class _AddressResultTile extends StatelessWidget {
   }
 }
 
-/// Doira ichidagi kulrang fonli yopish (X) tugmasi — asosiy forma modali
-/// va manzil qidiruv modali bir xil ko'rinishda bo'lishi uchun ikkalasida
-/// ham shu bitta widget ishlatiladi.
-class _CloseCircleBtn extends StatelessWidget {
-  final Color bg;
-  final Color iconColor;
-  final VoidCallback onTap;
-  const _CloseCircleBtn({required this.bg, required this.iconColor, required this.onTap});
-  @override
-  Widget build(BuildContext context) => Material(
-        color: bg,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: 32, height: 32,
-            child: Icon(Icons.close, color: iconColor, size: 18),
-          ),
-        ),
-      );
-}
-
 class _MapBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
@@ -1467,7 +1475,7 @@ class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
                 ),
               ),
-              _CloseCircleBtn(
+              CloseCircleButton(
                 bg: tabBg, iconColor: textSecondary,
                 onTap: () => Navigator.pop(context),
               ),
@@ -1634,7 +1642,7 @@ class _WeightPickerSheetState extends ConsumerState<_WeightPickerSheet> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
                 ),
               ),
-              _CloseCircleBtn(
+              CloseCircleButton(
                 bg: tabBg, iconColor: textSecondary,
                 onTap: () => Navigator.pop(context),
               ),
@@ -1741,7 +1749,7 @@ class _TimePickerSheetState extends ConsumerState<_TimePickerSheet> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
                 ),
               ),
-              _CloseCircleBtn(
+              CloseCircleButton(
                 bg: tabBg, iconColor: textSecondary,
                 onTap: () => Navigator.pop(context),
               ),
