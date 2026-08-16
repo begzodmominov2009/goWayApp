@@ -267,8 +267,9 @@ class _ActiveOrderDetailsScreenState extends ConsumerState<ActiveOrderDetailsScr
     if (result == true) {
       if (context.mounted) Navigator.pop(context, true);
     } else if (context.mounted) {
+      final locale = ref.read(localeProvider).languageCode;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Baholashni yuborib bo\'lmadi. Qayta urinib ko\'ring.')),
+        SnackBar(content: Text(AppStrings.get('rating_submit_error', locale))),
       );
     }
   }

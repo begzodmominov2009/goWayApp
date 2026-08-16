@@ -2131,8 +2131,9 @@ class _ActiveOrderSheet extends ConsumerWidget {
     if (result == true) {
       onAdvance();
     } else if (navigatorContext.mounted) {
+      final locale = ref.read(localeProvider).languageCode;
       ScaffoldMessenger.of(navigatorContext).showSnackBar(
-        const SnackBar(content: Text('Baholashni yuborib bo\'lmadi. Qayta urinib ko\'ring.')),
+        SnackBar(content: Text(AppStrings.get('rating_submit_error', locale))),
       );
     }
   }

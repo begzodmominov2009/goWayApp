@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
@@ -57,10 +58,28 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
       await widget.onSubmit(_score, combined.isEmpty ? null : combined);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
+      // Foydalanuvchiga faqat tushunarli xabar ko'rsatiladi (server
+      // qaytargan aniq sabab bo'lsa — o'sha, aks holda umumiy xabar);
+      // texnik tafsilotlar (status kodi, to'liq server javobi) faqat
+      // debugPrint orqali logga yoziladi — shu bilan xato "yashirilmaydi",
+      // keyingi safar sababi darhol log'da ko'rinadi.
+      String? serverMessage;
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['message'] is String) {
+          serverMessage = data['message'] as String;
+        }
+        debugPrint(
+          '[RatingDialog] Baho yuborishda xatolik — status: ${e.response?.statusCode}, '
+          'javob: ${e.response?.data}, turi: ${e.type}, xabar: ${e.message}',
+        );
+      } else {
+        debugPrint('[RatingDialog] Baho yuborishda kutilmagan xatolik: $e');
+      }
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = '${AppStrings.get('rating_submit_error', locale)}: $e';
+          _error = serverMessage ?? AppStrings.get('rating_submit_error', locale);
         });
       }
     }
