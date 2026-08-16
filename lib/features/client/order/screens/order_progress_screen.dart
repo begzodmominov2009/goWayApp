@@ -69,6 +69,10 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
 
   bool _searching = false;
   bool _submittingScheduled = false;
+  // Polling "CANCELLED" holatini bir necha marta ketma-ket ko'rishi mumkin
+  // (masalan tarmoq kechikishi tufayli) — shu bayroq modal ikki marta
+  // ustma-ust ochilib ketishining oldini oladi.
+  bool _showingNotFoundSheet = false;
   Map<String, dynamic>? _createdOrder;
   Timer? _pollTimer;
 
@@ -326,16 +330,48 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
             ));
           }
         } else if (status == 'CANCELLED') {
+          // Backend driver topa olmaganda buyurtmani avtomatik CANCELLED
+          // qilib qo'yadi (jobs/order.job.ts: findDriversForOrder, barcha
+          // radiuslar tugagach) — bu boshqa xato holatlaridan farqli
+          // o'laroq, "hech kim topilmadi" degani, shuning uchun oddiy
+          // xato snackbar o'rniga maxsus tasdiq modali ko'rsatiladi.
           _pollTimer?.cancel();
           if (!mounted) return;
-          setState(() => _searching = false);
-          final locale = ref.read(localeProvider).languageCode;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(AppStrings.get('generic_error', locale)), backgroundColor: AppTheme.errorColor),
-          );
+          _showDriverNotFoundSheet();
         }
       } catch (_) {}
     });
+  }
+
+  // Driver topilmagan holatda ko'rsatiladigan tasdiq modali. Har qanday
+  // yopilish yo'li (Qayta urinish, Bekor qilish, tashqariga bosish, pastga
+  // tortish) aniq bitta natijaga olib keladi — foydalanuvchi bo'sh qidiruv
+  // ekranida "osilib" qolmaydi.
+  Future<void> _showDriverNotFoundSheet() async {
+    if (_showingNotFoundSheet || !mounted) return;
+    _showingNotFoundSheet = true;
+    setState(() => _searching = false);
+    final retry = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _DriverNotFoundSheet(
+        onRetry: () => Navigator.pop(ctx, true),
+        onCancel: () => Navigator.pop(ctx, false),
+      ),
+    );
+    _showingNotFoundSheet = false;
+    if (!mounted) return;
+    // `retry == true` — faqat "Qayta urinish" bosilganda. Boshqa barcha
+    // yopilish yo'llari (Bekor qilish, tashqariga bosish, pastga tortish)
+    // `false`/`null` qaytaradi va bir xil "bekor qilish" natijasiga olib
+    // keladi.
+    if (retry == true) {
+      _placeOrder();
+    } else {
+      _cancelSearch();
+    }
   }
 
   Future<void> _cancelSearch() async {
@@ -834,6 +870,104 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Driver topilmagan holatda ko'rsatiladigan tasdiq varag'i —
+/// `_ScheduledOrderTicketSheet` bilan bir xil header/struktura uslubida
+/// (drag tutqich + CloseCircleButton, markazda ikonka doirasi, sarlavha,
+/// izoh), lekin bitta tugma o'rniga ikkita harakat tugmasi bor: "Qayta
+/// urinish" va "Bekor qilish". X tugmasi ham xuddi "Bekor qilish" kabi
+/// ishlaydi — barcha yopilish yo'llari bir xil natijaga olib kelishi shart.
+class _DriverNotFoundSheet extends ConsumerWidget {
+  final VoidCallback onRetry;
+  final VoidCallback onCancel;
+  const _DriverNotFoundSheet({required this.onRetry, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final cardBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 36, height: 4,
+                          decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+                        ),
+                        Positioned(
+                          right: 12, top: 8,
+                          child: CloseCircleButton(bg: cardBg, iconColor: textSecondary, onTap: onCancel),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(color: AppTheme.warningColor.withOpacity(0.12), shape: BoxShape.circle),
+                    child: const Icon(Icons.search_off, color: AppTheme.warningColor, size: 32),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    AppStrings.get('driver_not_found_title', locale),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppStrings.get('driver_not_found_desc', locale),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12.5, color: textSecondary, height: 1.4),
+                  ),
+                  const SizedBox(height: 20),
+                  _GradBtn(
+                    label: AppStrings.get('retry_connection', locale),
+                    onTap: onRetry,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: onCancel,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        side: BorderSide(color: border),
+                        foregroundColor: textSecondary,
+                      ),
+                      child: Text(AppStrings.get('cancel_search', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
   }
 }
 
