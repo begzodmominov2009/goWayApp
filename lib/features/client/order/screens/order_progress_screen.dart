@@ -15,6 +15,13 @@ import 'active_order_details_screen.dart';
 
 const List<String> _kFoundStatuses = ['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'];
 
+// order_form_modal.dart dagi _kSheetAnimationStyle bilan bir xil qiymatlar —
+// rejalashtirilgan buyurtma tasdiq modali ilova bo'ylab izchil animatsiyada ochilishi uchun.
+final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
+  duration: const Duration(milliseconds: 350),
+  reverseDuration: const Duration(milliseconds: 320),
+);
+
 /// Buyurtma yaratish oqimining oxirgi bosqichi — Order Form Modal'dan
 /// "Tasdiqlash" bosilgach ochiladi. Ikkita holatni boshqaradi:
 ///   1) Preview  (_searching == false) — marshrut xaritada ko'rsatiladi,
@@ -58,6 +65,7 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
   List<MapObject> _mapObjects = [];
 
   bool _searching = false;
+  bool _submittingScheduled = false;
   Map<String, dynamic>? _createdOrder;
   Timer? _pollTimer;
 
@@ -176,8 +184,17 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
   }
 
   Future<void> _placeOrder() async {
-    setState(() => _searching = true);
-    _centerOnPickupForSearch();
+    // Rejalashtirilgan buyurtmada qidiruv (radar/polling) UMUMAN
+    // boshlanmasligi kerak — driver backend tomonidan belgilangan vaqtdan
+    // 30 daqiqa oldin avtomatik qidiriladi. Shuning uchun _searching faqat
+    // ODDIY buyurtmada true qilinadi; rejalashtirilganda so'rov davomida
+    // tugmani ikki marta bosishdan saqlash uchun alohida bayroq ishlatiladi.
+    if (widget.isScheduled) {
+      setState(() => _submittingScheduled = true);
+    } else {
+      setState(() => _searching = true);
+      _centerOnPickupForSearch();
+    }
     try {
       final created = await ref.read(clientRepositoryProvider).createOrder(
         fromCity: widget.fromPlace.name, fromAddress: widget.fromPlace.address,
@@ -190,11 +207,19 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
         scheduledFor: widget.scheduledFor,
       );
       if (!mounted) return;
-      setState(() => _createdOrder = created);
-      _startPolling();
+      if (widget.isScheduled) {
+        setState(() => _submittingScheduled = false);
+        await _showScheduledConfirmationSheet(created);
+      } else {
+        setState(() => _createdOrder = created);
+        _startPolling();
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _searching = false);
+      setState(() {
+        _searching = false;
+        _submittingScheduled = false;
+      });
       if (e is OrderCreationException && e.reasonKey == 'bad_request') {
         _showInactiveRouteDialog(e.serverMessage);
         return;
@@ -204,6 +229,31 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
         SnackBar(content: Text(_errorMessage(e, locale)), backgroundColor: AppTheme.errorColor),
       );
     }
+  }
+
+  // Rejalashtirilgan buyurtma muvaffaqiyatli yaratilgach ko'rsatiladigan
+  // chipta uslubidagi tasdiq modali. Qanday yopilishidan qat'i nazar (tugma,
+  // pastga tortish yoki chetiga bosish) — modal yopilgach foydalanuvchi
+  // Home ekraniga qaytadi, bo'sh Progress ekranida qolib ketmaydi.
+  Future<void> _showScheduledConfirmationSheet(Map<String, dynamic> created) async {
+    final locale = ref.read(localeProvider).languageCode;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _ScheduledOrderTicketSheet(
+        scheduledFor: widget.scheduledFor!,
+        fromPlace: widget.fromPlace,
+        toPlace: widget.toPlace,
+        truckType: widget.truckType,
+        weight: widget.weight,
+        distKm: (created['distance'] as num?)?.toDouble() ?? _currentDistKm,
+        price: (created['price'] as num?)?.toDouble(),
+        locale: locale,
+      ),
+    );
+    if (mounted) Navigator.pop(context);
   }
 
   String _errorMessage(Object e, String locale) {
@@ -450,7 +500,7 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
                     const SizedBox(height: 16),
                     _GradBtn(
                       label: AppStrings.get('place_order', locale),
-                      onTap: _placeOrder,
+                      onTap: _submittingScheduled ? null : _placeOrder,
                     ),
                   ] else ...[
                     Row(children: [
@@ -592,6 +642,184 @@ class _GradBtn extends StatelessWidget {
           child: Text(label, style: TextStyle(color: enabled ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700)),
         ),
       ),
+    );
+  }
+}
+
+/// Rejalashtirilgan buyurtma muvaffaqiyatli yaratilgach ko'rsatiladigan
+/// chipta (ticket) uslubidagi tasdiq varag'i — driver belgilangan vaqtdan
+/// oldin avtomatik qidirilishini tushuntiradi, hech qanday qidiruv/polling
+/// mantig'ini o'zida saqlamaydi.
+class _ScheduledOrderTicketSheet extends StatelessWidget {
+  final DateTime scheduledFor;
+  final Place fromPlace;
+  final Place toPlace;
+  final String truckType;
+  final double weight;
+  final double? distKm;
+  final double? price;
+  final String locale;
+
+  const _ScheduledOrderTicketSheet({
+    required this.scheduledFor,
+    required this.fromPlace,
+    required this.toPlace,
+    required this.truckType,
+    required this.weight,
+    required this.distKm,
+    required this.price,
+    required this.locale,
+  });
+
+  String get _dateTimeLabel {
+    final now = DateTime.now();
+    final date = DateTime(scheduledFor.year, scheduledFor.month, scheduledFor.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final dayLabel = date == today
+        ? AppStrings.get('today', locale)
+        : AppStrings.get('order_type_tomorrow', locale);
+    final timeLabel =
+        '${scheduledFor.hour.toString().padLeft(2, '0')}:${scheduledFor.minute.toString().padLeft(2, '0')}';
+    return '$dayLabel, $timeLabel';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final cardBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(child: Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+                )),
+                const SizedBox(height: 18),
+                Container(
+                  width: 56, height: 56,
+                  decoration: BoxDecoration(color: AppTheme.successColor.withOpacity(0.12), shape: BoxShape.circle),
+                  child: const Icon(Icons.check_circle, color: AppTheme.successColor, size: 34),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  AppStrings.get('scheduled_confirm_title', locale),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textPrimary),
+                ),
+                const SizedBox(height: 18),
+
+                // Chipta ko'rinishidagi kartochka — bo'limlar orasida ajratuvchi chiziqlar
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Text(
+                        _dateTimeLabel,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.primaryColor),
+                      ),
+                      const SizedBox(height: 14),
+                      Divider(color: border, height: 1),
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Column(children: [
+                          const Icon(Icons.local_shipping, size: 14, color: AppTheme.primaryColor),
+                          Container(width: 1, height: 20, color: border),
+                          const Icon(Icons.flag, size: 14, color: AppTheme.successColor),
+                        ]),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(AddressHelper.shorten(fromPlace.name),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 10),
+                            Text(AddressHelper.shorten(toPlace.name),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        )),
+                      ]),
+                      const SizedBox(height: 14),
+                      Divider(color: border, height: 1),
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Expanded(child: _TicketStat(label: AppStrings.get('truck_type', locale), value: truckType)),
+                        Expanded(child: _TicketStat(label: AppStrings.get('weight_label', locale), value: '$weight t')),
+                      ]),
+                      if (distKm != null || price != null) ...[
+                        const SizedBox(height: 14),
+                        Divider(color: border, height: 1),
+                        const SizedBox(height: 14),
+                        Row(children: [
+                          if (distKm != null)
+                            Expanded(child: _TicketStat(label: AppStrings.get('route_distance_label', locale), value: '${distKm!.toStringAsFixed(1)} km')),
+                          if (price != null)
+                            Expanded(child: _TicketStat(label: AppStrings.get('estimated_price_label', locale), value: '${price!.toStringAsFixed(0)} so\'m')),
+                        ]),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  AppStrings.get('scheduled_confirm_desc', locale),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12.5, color: textSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 18),
+                _GradBtn(
+                  label: AppStrings.get('understood', locale),
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _TicketStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 3),
+        Text(value,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textPrimary),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+      ],
     );
   }
 }
