@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
@@ -167,6 +169,29 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
     _load();
   }
 
+  // Bo'sh holatni tushuntirish va yuqoridagi "faol yo'nalish" bannerini
+  // qaysi liniyaga nisbatan ko'rsatish kerakligini aniqlaydi: agar filtr
+  // tanlangan bo'lsa — aynan o'sha liniya; aks holda (filtrsiz) — faol
+  // liniyalardan biri (bo'lsa), bo'lmasa ro'yxatdagi birinchisi (muddati
+  // tugagan holatni ko'rsatish uchun kamida bittasi kerak).
+  _LineOption? get _contextLine {
+    if (_selectedLineId != null) {
+      for (final l in _driverLines) {
+        if (l.id == _selectedLineId) return l;
+      }
+      return null;
+    }
+    if (_driverLines.isEmpty) return null;
+    for (final l in _driverLines) {
+      if (l.isCurrentlyActive) return l;
+    }
+    return _driverLines.first;
+  }
+
+  void _goToLineScreen() {
+    context.push(AppRoutes.driverLine);
+  }
+
   Future<void> _openDetail(Map<String, dynamic> order) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -305,6 +330,8 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
               ),
             ),
             const SizedBox(height: 12),
+            if (_contextLine != null && _contextLine!.isCurrentlyActive)
+              _ActiveLineBanner(line: _contextLine!, locale: locale, textPrimary: textPrimary),
             Expanded(
               child: _loading
                   ? ListView.builder(
@@ -313,7 +340,7 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
                       itemBuilder: (ctx, i) => _SkeletonOrderCard(isDark: isDark),
                     )
                   : _orders.isEmpty
-                      ? _EmptyState(locale: locale, textSecondary: textSecondary)
+                      ? _buildEmptyState(locale, textSecondary)
                       : RefreshIndicator(
                           onRefresh: _load,
                           child: ListView.builder(
@@ -340,6 +367,22 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
         ),
       ),
     );
+  }
+
+  // Ro'yxat bo'sh bo'lganda uchta holatni ajratadi: liniya umuman yo'q /
+  // liniya bor-lekin muddati tugagan (yoki isActive=false) / liniya faol
+  // (oddiy "buyurtma yo'q" xabari).
+  Widget _buildEmptyState(String locale, Color textSecondary) {
+    if (_driverLines.isEmpty) {
+      return _NoLineEmptyState(locale: locale, textSecondary: textSecondary, onAddRoute: _goToLineScreen);
+    }
+    final line = _contextLine;
+    if (line != null && !line.isCurrentlyActive) {
+      return _LineExpiredEmptyState(
+        locale: locale, textSecondary: textSecondary, line: line, onReactivate: _goToLineScreen,
+      );
+    }
+    return _EmptyState(locale: locale, textSecondary: textSecondary);
   }
 }
 
@@ -384,6 +427,21 @@ String _formatTime(dynamic iso) {
   return '$h:$m';
 }
 
+// Liniyaning qolgan amal qilish vaqti — "4 soat 20 daqiqa qoldi" uslubida
+// (order_progress_screen.dart / order_form_modal.dart dagi route_time_hour
+// / route_time_min birliklaridan foydalanadi, faqat "qoldi" so'zi yangi).
+String _formatRemaining(DateTime expiresAt, String locale) {
+  final diff = expiresAt.difference(DateTime.now());
+  if (diff.isNegative) return '';
+  final hours = diff.inHours;
+  final minutes = diff.inMinutes % 60;
+  final hourUnit = AppStrings.get('route_time_hour', locale);
+  final minUnit = AppStrings.get('route_time_min', locale);
+  final suffix = AppStrings.get('line_time_left_suffix', locale);
+  if (hours > 0) return '$hours $hourUnit $minutes $minUnit $suffix';
+  return '$minutes $minUnit $suffix';
+}
+
 String? _extractClientName(Map<String, dynamic> order) {
   final client = order['client'];
   if (client is Map) {
@@ -404,14 +462,24 @@ class _LineOption {
   final String? fromDistrictId;
   final String? toRegionId;
   final String? toDistrictId;
+  final bool isActive;
+  final DateTime? expiresAt;
   String fromLabel;
   String toLabel;
 
   _LineOption({
     this.id, this.fromRegionId, this.fromDistrictId,
     this.toRegionId, this.toDistrictId,
+    this.isActive = true, this.expiresAt,
     this.fromLabel = '', this.toLabel = '',
   });
+
+  // Backend isActive'ni buyurtma tugagach yoki muddati o'tgach avtomatik
+  // false qilmasligi mumkin — shuning uchun faqat isActive'ga ishonmay,
+  // expiresAt ham hali o'tmaganini tekshiramiz (driver_line_screen.dart
+  // dagi `expired` getteriga o'xshash naqsh).
+  bool get isCurrentlyActive =>
+      isActive && !(expiresAt != null && expiresAt!.isBefore(DateTime.now()));
 
   factory _LineOption.fromJson(Map<String, dynamic> json) => _LineOption(
         id: json['id']?.toString(),
@@ -419,6 +487,8 @@ class _LineOption {
         fromDistrictId: json['fromDistrictId'] as String?,
         toRegionId: json['toRegionId'] as String?,
         toDistrictId: json['toDistrictId'] as String?,
+        isActive: json['isActive'] as bool? ?? true,
+        expiresAt: json['expiresAt'] is String ? DateTime.tryParse(json['expiresAt'] as String) : null,
       );
 }
 
@@ -536,6 +606,166 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: textSecondary, fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Bo'sh holat 1 — driverning umuman doimiy yo'nalishi yo'q. Ikonka va
+/// sarlavha driver_line_screen.dart dagi "yo'nalish yo'q" holati bilan bir
+/// xil (`Icons.signpost_outlined`, `no_route_yet`, gradient tugma) —
+/// izchillik uchun mavjud uslub takrorlanadi.
+class _NoLineEmptyState extends StatelessWidget {
+  final String locale;
+  final Color textSecondary;
+  final VoidCallback onAddRoute;
+  const _NoLineEmptyState({required this.locale, required this.textSecondary, required this.onAddRoute});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.signpost_outlined, size: 52, color: textSecondary.withOpacity(0.5)),
+            const SizedBox(height: 14),
+            Text(
+              AppStrings.get('no_route_yet', locale),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: textSecondary, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              AppStrings.get('scheduled_no_line_desc', locale),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: textSecondary),
+            ),
+            const SizedBox(height: 18),
+            GestureDetector(
+              onTap: onAddRoute,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)]),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.add, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(AppStrings.get('add_route', locale), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bo'sh holat 2 — liniya bor, lekin muddati tugagan (yoki isActive=false).
+/// Ikonka/rang/tugma uslubi driver_line_screen.dart dagi "muddati tugagan"
+/// kartochkasi bilan bir xil (`Icons.warning_amber_rounded`,
+/// `route_expired_title`, errorColor, `reactivate_route`).
+class _LineExpiredEmptyState extends StatelessWidget {
+  final String locale;
+  final Color textSecondary;
+  final _LineOption line;
+  final VoidCallback onReactivate;
+  const _LineExpiredEmptyState({
+    required this.locale, required this.textSecondary, required this.line, required this.onReactivate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final routeName = (line.fromLabel.isNotEmpty && line.toLabel.isNotEmpty)
+        ? '${line.fromLabel} → ${line.toLabel}'
+        : null;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 48, color: AppTheme.errorColor),
+            const SizedBox(height: 14),
+            Text(
+              AppStrings.get('route_expired_title', locale),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: AppTheme.errorColor, fontWeight: FontWeight.w700),
+            ),
+            if (routeName != null) ...[
+              const SizedBox(height: 4),
+              Text(routeName, textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600)),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              AppStrings.get('scheduled_line_expired_desc', locale),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: textSecondary),
+            ),
+            const SizedBox(height: 18),
+            GestureDetector(
+              onTap: onReactivate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(color: AppTheme.errorColor, borderRadius: BorderRadius.circular(14)),
+                child: Text(
+                  AppStrings.get('reactivate_route', locale),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Faol liniya bo'lganda ekran yuqorisida ko'rinadigan banner — driver
+/// yo'nalishi va uning qolgan amal qilish vaqtini oldindan biladi.
+class _ActiveLineBanner extends StatelessWidget {
+  final _LineOption line;
+  final String locale;
+  final Color textPrimary;
+  const _ActiveLineBanner({required this.line, required this.locale, required this.textPrimary});
+
+  @override
+  Widget build(BuildContext context) {
+    final routeName = (line.fromLabel.isNotEmpty && line.toLabel.isNotEmpty)
+        ? '${line.fromLabel} → ${line.toLabel}'
+        : null;
+    final remaining = line.expiresAt != null ? _formatRemaining(line.expiresAt!, locale) : '';
+    if (routeName == null && remaining.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryColor.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.25)),
+        ),
+        child: Row(children: [
+          const Icon(Icons.alt_route, size: 16, color: AppTheme.primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              [if (routeName != null) routeName, if (remaining.isNotEmpty) remaining].join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
+            ),
+          ),
+        ]),
       ),
     );
   }
