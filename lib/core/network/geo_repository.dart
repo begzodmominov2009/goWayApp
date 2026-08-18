@@ -69,12 +69,61 @@ class GeoDistrict {
   }
 }
 
+/// /check-point javobi — bitta nuqta (koordinata/nom) qaysi viloyatga
+/// tegishli va u faolmi, backend order-errors.ts/geo.controller.ts bilan
+/// bir xil reasonKey qiymatlarini qaytaradi ('location_unresolved' —
+/// hech qaysi viloyatga bog'lanmadi, 'region_inactive' — viloyat
+/// aniqlandi lekin hali faol emas, active bo'lsa reasonKey null).
+class CheckPointResult {
+  final bool active;
+  final String? regionId;
+  final String? regionName;
+  final String? reasonKey;
+
+  CheckPointResult({
+    required this.active,
+    this.regionId,
+    this.regionName,
+    this.reasonKey,
+  });
+
+  factory CheckPointResult.fromJson(Map<String, dynamic> json) => CheckPointResult(
+        active: json['active'] as bool? ?? false,
+        regionId: json['regionId'] as String?,
+        regionName: json['regionName'] as String?,
+        reasonKey: json['reasonKey'] as String?,
+      );
+}
+
 /// Backend'dagi /regions/* endpointlariga murojaat qiluvchi klass —
 /// buyurtma yaratishda va haydovchi liniyasini belgilashda viloyat va
 /// tuman tanlash bosqichlari uchun ishlatiladi.
 class GeoRepository {
   final Dio _dio;
   GeoRepository(this._dio);
+
+  // Manzil tanlangan zahoti (forma to'ldirilayotganda, ikkinchi nuqta
+  // hali bo'sh bo'lsa ham) bitta nuqtani darhol tekshiradi — createOrder
+  // bilan AYNAN bir xil qaror (backendda bir xil resolveRegion). Tarmoq
+  // xatosida null qaytadi — chaqiruvchi taraf shu holatda ogohlantirishni
+  // o'tkazib yuboradi, buyurtma yaratishdagi mavjud tekshiruv (400 +
+  // reasonKey) baribir ushlab qoladi.
+  Future<CheckPointResult?> checkPoint({
+    double? latitude,
+    double? longitude,
+    String? name,
+  }) async {
+    try {
+      final res = await _dio.post('/check-point', data: {
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (name != null) 'name': name,
+      });
+      return CheckPointResult.fromJson(Map<String, dynamic>.from(res.data['data']));
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<List<GeoRegion>> getAllRegions() async {
     try {

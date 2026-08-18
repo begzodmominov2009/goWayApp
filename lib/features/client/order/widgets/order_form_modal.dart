@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/network/client_repository.dart';
+import '../../../../core/network/geo_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -93,6 +94,16 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
   int? _currentTimeMin;
   bool _routeLoading = false;
 
+  // /check-point orqali manzil tanlangan zahoti tekshirish — har bir
+  // maydon ("Qayerdan"/"Qayerga") mustaqil. _fromCheckGen/_toCheckGen —
+  // foydalanuvchi tez-tez manzil o'zgartirsa, eskirgan javob e'tiborsiz
+  // qoldirilishi uchun (faqat oxirgi so'rov gen'i joriy bo'lsa natija
+  // qo'llaniladi).
+  bool _fromChecking = false;
+  bool _toChecking = false;
+  int _fromCheckGen = 0;
+  int _toCheckGen = 0;
+
   String? _selectedTruck;
   double? _selectedWeight;
   String? _selectedLoadType;
@@ -154,6 +165,71 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
       _calculatedPrice = null;
     });
     _recalculateRoute();
+    _checkPoint(isFrom: isFrom);
+  }
+
+  // Manzil tanlangan har bir yo'ldan (qidiruv, xarita, saqlangan manzil,
+  // qidiruv tarixi) o'tadigan YAGONA nuqta — _setPlace() barchasi uchun
+  // umumiy chaqiruvchi, shuning uchun shu yerga qo'shish barcha yo'llarni
+  // avtomatik qamrab oladi.
+  Future<void> _checkPoint({required bool isFrom}) async {
+    final place = isFrom ? _fromPlace : _toPlace;
+    if (place == null) return;
+    final myGen = isFrom ? ++_fromCheckGen : ++_toCheckGen;
+    setState(() {
+      if (isFrom) {
+        _fromChecking = true;
+      } else {
+        _toChecking = true;
+      }
+    });
+    final result = await ref.read(geoRepositoryProvider).checkPoint(
+          latitude: place.lat, longitude: place.lng, name: place.name,
+        );
+    if (!mounted) return;
+    final isStale = isFrom ? myGen != _fromCheckGen : myGen != _toCheckGen;
+    if (isStale) return;
+    setState(() {
+      if (isFrom) {
+        _fromChecking = false;
+      } else {
+        _toChecking = false;
+      }
+    });
+    // Tarmoq xatosida (result == null) oqim to'xtamaydi — buyurtma
+    // yaratishdagi mavjud tekshiruv (backendReasonKey) baribir ushlab qoladi.
+    if (result == null || result.active) return;
+    _showRegionWarningSheet(result, isFrom: isFrom);
+  }
+
+  Future<void> _showRegionWarningSheet(CheckPointResult result, {required bool isFrom}) async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _RegionWarningSheet(
+        reasonKey: result.reasonKey,
+        regionName: result.regionName,
+        isFrom: isFrom,
+        onViewRegions: () {
+          Navigator.pop(ctx);
+          _showRegionsListSheet();
+        },
+      ),
+    );
+  }
+
+  Future<void> _showRegionsListSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => const _RegionsListSheet(),
+    );
   }
 
   void _clearPlace(bool isFrom) {
@@ -499,10 +575,15 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               decoration: _fieldDecoration(
                                 hint: AppStrings.get('from_question', locale),
                                 hintColor: textSecondary,
-                                suffixIcon: _fromCtrl.text.isNotEmpty
-                                    ? IconButton(icon: Icon(Icons.close, size: 14, color: textSecondary),
-                                        onPressed: () => _clearPlace(true))
-                                    : null,
+                                suffixIcon: _fromChecking
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(14),
+                                        child: SizedBox(width: 14, height: 14, child: AppLoadingIndicator(strokeWidth: 2)),
+                                      )
+                                    : (_fromCtrl.text.isNotEmpty
+                                        ? IconButton(icon: Icon(Icons.close, size: 14, color: textSecondary),
+                                            onPressed: () => _clearPlace(true))
+                                        : null),
                               ),
                             )),
                             _MapBtn(label: AppStrings.get('map_btn_label', locale), onTap: () => _openMapPicker(true)),
@@ -523,10 +604,15 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               decoration: _fieldDecoration(
                                 hint: AppStrings.get('to_question', locale),
                                 hintColor: textSecondary,
-                                suffixIcon: _toCtrl.text.isNotEmpty
-                                    ? IconButton(icon: Icon(Icons.close, size: 14, color: textSecondary),
-                                        onPressed: () => _clearPlace(false))
-                                    : null,
+                                suffixIcon: _toChecking
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(14),
+                                        child: SizedBox(width: 14, height: 14, child: AppLoadingIndicator(strokeWidth: 2)),
+                                      )
+                                    : (_toCtrl.text.isNotEmpty
+                                        ? IconButton(icon: Icon(Icons.close, size: 14, color: textSecondary),
+                                            onPressed: () => _clearPlace(false))
+                                        : null),
                               ),
                             )),
                             _MapBtn(label: AppStrings.get('map_btn_label', locale), onTap: () => _openMapPicker(false)),
@@ -1856,6 +1942,244 @@ class _TimeTab extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : textPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Manzil (bitta nuqta — "Qayerdan" yoki "Qayerga") tanlangan zahoti
+/// /check-point orqali tekshirilib, hudud faol bo'lmasa yoki umuman
+/// aniqlanmasa ko'rsatiladigan ogohlantirish — boshqa pastdan chiquvchi
+/// modallar (masalan _TruckPickerSheet) bilan bir xil uslubda.
+class _RegionWarningSheet extends ConsumerWidget {
+  final String? reasonKey;
+  final String? regionName;
+  final bool isFrom;
+  final VoidCallback onViewRegions;
+
+  const _RegionWarningSheet({
+    required this.reasonKey,
+    required this.regionName,
+    required this.isFrom,
+    required this.onViewRegions,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    final isUnresolved = reasonKey == 'location_unresolved';
+    final title = isUnresolved
+        ? AppStrings.get('location_unresolved_title', locale)
+        : AppStrings.get('route_inactive_title', locale);
+    final message = isUnresolved
+        ? (isFrom
+            ? AppStrings.get('location_unresolved_from_message', locale)
+            : AppStrings.get('location_unresolved_to_message', locale))
+        : AppStrings.get('region_inactive_dialog_message', locale).replaceFirst('{region}', regionName ?? '');
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(width: 36, height: 4,
+                      decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+                  Positioned(
+                    right: 0, top: 0,
+                    child: CloseCircleButton(bg: tabBg, iconColor: textSecondary, onTap: () => Navigator.pop(context)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(color: AppTheme.warningColor.withOpacity(0.12), shape: BoxShape.circle),
+              child: Icon(isUnresolved ? Icons.location_off_outlined : Icons.pin_drop_outlined,
+                  color: AppTheme.warningColor, size: 30),
+            ),
+            const SizedBox(height: 14),
+            Text(title, textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+            const SizedBox(height: 8),
+            Text(message, textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4)),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onViewRegions,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    side: BorderSide(color: border),
+                    foregroundColor: textPrimary,
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(AppStrings.get('view_active_regions', locale),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _GradBtn(label: AppStrings.get('close', locale), onTap: () => Navigator.pop(context)),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Barcha viloyatlar ro'yxati — faqat ko'rish uchun (GET /regions/all,
+/// admin bo'lmagan foydalanuvchi ham ochadi). Ko'rinishi
+/// region_picker_page.dart dagi ro'yxatga o'xshash, lekin tanlash yo'q —
+/// bosilganda hech narsa bo'lmaydi.
+class _RegionsListSheet extends ConsumerStatefulWidget {
+  const _RegionsListSheet();
+
+  @override
+  ConsumerState<_RegionsListSheet> createState() => _RegionsListSheetState();
+}
+
+class _RegionsListSheetState extends ConsumerState<_RegionsListSheet> {
+  bool _loading = true;
+  List<GeoRegion> _regions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final list = await ref.read(geoRepositoryProvider).getAllRegions();
+    list.sort((a, b) => a.name.compareTo(b.name));
+    if (!mounted) return;
+    setState(() {
+      _regions = list;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = ref.watch(localeProvider).languageCode;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    return FractionallySizedBox(
+      heightFactor: 0.75,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(width: 36, height: 4,
+                        decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+                    Positioned(
+                      right: 0, top: 0,
+                      child: CloseCircleButton(bg: tabBg, iconColor: textSecondary, onTap: () => Navigator.pop(context)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(AppStrings.get('regions_list_title', locale),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _loading
+                    ? const Center(child: AppLoadingIndicator())
+                    : ListView.separated(
+                        itemCount: _regions.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: border),
+                        itemBuilder: (ctx, i) {
+                          final region = _regions[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Row(children: [
+                              Expanded(
+                                child: Text(
+                                  region.name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                                      color: region.isActive ? textPrimary : textSecondary),
+                                ),
+                              ),
+                              if (!region.isActive)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(AppStrings.get('route_inactive_badge', locale),
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textSecondary)),
+                                ),
+                            ]),
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    side: BorderSide(color: border),
+                    foregroundColor: textPrimary,
+                  ),
+                  child: Text(AppStrings.get('close', locale), style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

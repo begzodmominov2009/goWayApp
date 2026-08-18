@@ -399,6 +399,8 @@ class AppStrings {
       'location_unresolved_from_message': 'Boshlanish nuqtangizni aniqlab bo\'lmadi. Iltimos, boshqa manzil tanlang.',
       'location_unresolved_to_message': 'Borish manzilingizni aniqlab bo\'lmadi. Iltimos, boshqa manzil tanlang.',
       'region_inactive_dialog_message': '{region} yo\'nalishi hozircha xizmat ko\'rsatilmayapti. Tez orada faollashtiramiz.',
+      'view_active_regions': 'Faol viloyatlarni ko\'rish',
+      'regions_list_title': 'Viloyatlar ro\'yxati',
       // ==== Haydovchi liniyasi / rejalashtirilgan buyurtmalar ====
       'my_line': 'Mening yo\'nalishim',
       'scheduled_orders_title': 'Rejalashtirilgan buyurtmalar',
@@ -884,6 +886,8 @@ class AppStrings {
       'location_unresolved_from_message': 'Не удалось определить точку отправления. Пожалуйста, выберите другой адрес.',
       'location_unresolved_to_message': 'Не удалось определить адрес назначения. Пожалуйста, выберите другой адрес.',
       'region_inactive_dialog_message': 'Направление {region} пока не обслуживается. Скоро мы его активируем.',
+      'view_active_regions': 'Посмотреть активные регионы',
+      'regions_list_title': 'Список регионов',
       // ==== Линия водителя / запланированные заказы ====
       'my_line': 'Мой маршрут',
       'scheduled_orders_title': 'Запланированные заказы',
@@ -1369,6 +1373,8 @@ class AppStrings {
       'location_unresolved_from_message': 'We couldn\'t determine your pickup point. Please choose a different address.',
       'location_unresolved_to_message': 'We couldn\'t determine your destination. Please choose a different address.',
       'region_inactive_dialog_message': 'The {region} route is not served yet. We\'ll activate it soon.',
+      'view_active_regions': 'View active regions',
+      'regions_list_title': 'List of regions',
       // ==== Driver line / scheduled orders ====
       'my_line': 'My route',
       'scheduled_orders_title': 'Scheduled orders',
