@@ -44,7 +44,12 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
   List<Map<String, dynamic>> _allOrders = [];
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
-  String _searchQuery = '';
+  // ValueNotifier — TextField'ga har harf kiritilganda ekranning butun
+  // build()'ini (tablar, sarlavha, input) emas, faqat ro'yxat qismini
+  // (quyida ValueListenableBuilder bilan o'ralgan) qayta quradi. Ro'yxat
+  // uzun bo'lsa, setState bilan butun ekranni qayta qurish yozishni
+  // sezilarli sekinlashtirar edi.
+  final _searchQuery = ValueNotifier<String>('');
   bool _searchActive = false;
 
   @override
@@ -52,7 +57,7 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     super.initState();
     _load();
     _searchCtrl.addListener(() {
-      setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
+      _searchQuery.value = _searchCtrl.text.trim().toLowerCase();
     });
     _searchFocus.addListener(() {
       if (!mounted) return;
@@ -64,6 +69,7 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
   void dispose() {
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _searchQuery.dispose();
     super.dispose();
   }
 
@@ -97,14 +103,14 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     _searchFocus.unfocus();
   }
 
-  bool _matchesSearch(Map<String, dynamic> order) {
-    if (_searchQuery.isEmpty) return true;
+  bool _matchesSearch(Map<String, dynamic> order, String query) {
+    if (query.isEmpty) return true;
     final from = (order['fromCity'] as String? ?? '').toLowerCase();
     final to = (order['toCity'] as String? ?? '').toLowerCase();
-    return from.contains(_searchQuery) || to.contains(_searchQuery);
+    return from.contains(query) || to.contains(query);
   }
 
-  List<Map<String, dynamic>> get _orders {
+  List<Map<String, dynamic>> _filteredOrders(String query) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final targetDate = _day == 'today' ? today : today.add(const Duration(days: 1));
@@ -115,7 +121,7 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
       if (scheduledFor == null) return false;
       final scheduledDate = DateTime(scheduledFor.year, scheduledFor.month, scheduledFor.day);
       if (scheduledDate != targetDate) return false;
-      return _matchesSearch(o);
+      return _matchesSearch(o, query);
     }).toList();
   }
 
@@ -161,8 +167,6 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final closeBtnBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
-
-    final orders = _orders;
 
     return Scaffold(
       backgroundColor: surface,
@@ -293,38 +297,47 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: _loading
-                  ? ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                      itemCount: 4,
-                      itemBuilder: (ctx, i) => _SkeletonOrderCard(isDark: isDark),
-                    )
-                  : orders.isEmpty
-                      ? _EmptyState(
-                          locale: locale, textSecondary: textSecondary,
-                          icon: Icons.event_busy_outlined,
-                          text: AppStrings.get('no_scheduled_orders', locale),
+              // Faqat shu qism qidiruv matni o'zgarganda qayta quriladi —
+              // tablar, sarlavha va input yuqorida, ValueListenableBuilder
+              // tashqarisida qoladi.
+              child: ValueListenableBuilder<String>(
+                valueListenable: _searchQuery,
+                builder: (context, query, _) {
+                  final orders = _filteredOrders(query);
+                  return _loading
+                      ? ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                          itemCount: 4,
+                          itemBuilder: (ctx, i) => _SkeletonOrderCard(isDark: isDark),
                         )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                            itemCount: orders.length,
-                            itemBuilder: (ctx, i) {
-                              final order = orders[i];
-                              return _ClientScheduledOrderCard(
-                                order: order,
-                                isDark: isDark,
-                                locale: locale,
-                                surface: surface,
-                                border: border,
-                                textPrimary: textPrimary,
-                                textSecondary: textSecondary,
-                                onDetail: () => _openDetail(order),
-                              );
-                            },
-                          ),
-                        ),
+                      : orders.isEmpty
+                          ? _EmptyState(
+                              locale: locale, textSecondary: textSecondary,
+                              icon: Icons.event_busy_outlined,
+                              text: AppStrings.get('no_scheduled_orders', locale),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _load,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                                itemCount: orders.length,
+                                itemBuilder: (ctx, i) {
+                                  final order = orders[i];
+                                  return _ClientScheduledOrderCard(
+                                    order: order,
+                                    isDark: isDark,
+                                    locale: locale,
+                                    surface: surface,
+                                    border: border,
+                                    textPrimary: textPrimary,
+                                    textSecondary: textSecondary,
+                                    onDetail: () => _openDetail(order),
+                                  );
+                                },
+                              ),
+                            );
+                },
+              ),
             ),
           ],
         ),
