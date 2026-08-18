@@ -41,6 +41,21 @@ class OrderCreationException implements Exception {
   String toString() => 'OrderCreationException($reasonKey): $debugMessage';
 }
 
+/// Rejalashtirilgan buyurtmani bekor qilishda backend rad etsa (masalan
+/// driver allaqachon qabul qilgan) shu bilan tashlanadi. `reasonKey` —
+/// backend order-errors.ts/OrderCancelError dan kelgan aynan qiymat
+/// ('order_already_accepted' | 'order_not_cancelable'), javob kutilmagan
+/// shaklda kelsa yoki reasonKey bo'lmasa null qoladi — chaqiruvchi taraf
+/// bu holatda umumiy xatoga tushadi.
+class OrderCancelException implements Exception {
+  final String? reasonKey;
+  final String debugMessage;
+  OrderCancelException(this.reasonKey, this.debugMessage);
+
+  @override
+  String toString() => 'OrderCancelException($reasonKey): $debugMessage';
+}
+
 class ClientRepository {
   final Dio _dio;
   ClientRepository(this._dio);
@@ -182,6 +197,22 @@ class ClientRepository {
   // Buyurtmani bekor qilish
   Future<void> cancelOrder(String orderId) async {
     await _dio.post('/orders/$orderId/cancel');
+  }
+
+  // Rejalashtirilgan (SCHEDULED) buyurtmani bekor qilish — cancelOrder'dan
+  // farqli, alohida endpoint (hali driver qidirilmagan/bog'lanmagan holat).
+  // Backend rad etsa (masalan driver allaqachon qabul qilgan), javob
+  // tanasidagi reasonKey OrderCancelException orqali chaqiruvchiga
+  // uzatiladi — shu asosda UI holatni aniq ko'rsatadi.
+  Future<void> cancelScheduledOrder(String orderId) async {
+    try {
+      await _dio.post('/orders/$orderId/cancel-schedule');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final reasonKey = (data is Map && data['reasonKey'] is String) ? data['reasonKey'] as String : null;
+      final serverMsg = (data is Map && data['message'] is String) ? data['message'] as String : null;
+      throw OrderCancelException(reasonKey, serverMsg ?? e.message ?? 'cancel-schedule failed');
+    }
   }
 
   // Profil
