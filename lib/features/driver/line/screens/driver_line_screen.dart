@@ -9,7 +9,6 @@ import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geo_repository.dart';
 import '../../../../shared/widgets/tutorial_sheet.dart';
 import 'region_picker_page.dart';
-import 'district_picker_page.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
@@ -58,8 +57,10 @@ bool _looksLikeInactiveRouteError(String message) {
 }
 
 /// Bitta haydovchi yo'nalishi — backend'dan (/driver/lines) kelgan xom
-/// ma'lumot + Flutter tomonida (viloyat/tuman ro'yxatlaridan) aniqlangan
-/// ko'rsatish nomlari (faqat tuman/shahar darajasida, viloyat nomisiz).
+/// ma'lumot + Flutter tomonida (viloyat ro'yxatidan) aniqlangan ko'rsatish
+/// nomlari. fromDistrictId/toDistrictId endi yangi liniyalarda doim null
+/// (backend faqat viloyat darajasida ishlaydi), shu maydonlar faqat eski
+/// (bu o'zgarishdan oldin yaratilgan) liniyalar uchun saqlanib qolgan.
 class _DriverLineItem {
   final String id;
   final String? fromRegionId;
@@ -204,31 +205,14 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
 
   // ==== Yangi yo'nalish qo'shish — sahifama-sahifa oqim ====
 
-  // Bitta "viloyat -> tuman" juftligini tanlaydi. Tuman sahifasidan orqaga
-  // qaytilsa (natija null), viloyat sahifasi qayta ko'rsatiladi — shu bilan
-  // "faqat bitta bosqich orqaga" hissi beriladi, lekin har bir sahifa
-  // baribir faqat o'zini yopadi (bitta martalik Navigator.push, hech qanday
-  // pushReplacement/popUntil ishlatilmaydi). Viloyat sahifasidan orqaga
-  // qaytilsa, butun juftlik null qaytadi va chaqiruvchi oqim to'xtaydi.
-  Future<(GeoRegion, GeoDistrict)?> _pickRegionAndDistrict(String title) async {
-    while (mounted) {
-      final region = await Navigator.push<GeoRegion>(
-        context,
-        _slideRoute(RegionPickerPage(title: title)),
-      );
-      if (region == null || !mounted) return null;
-
-      final district = await Navigator.push<GeoDistrict>(
-        context,
-        _slideRoute(DistrictPickerPage(title: title, region: region)),
-      );
-      if (district == null) {
-        if (!mounted) return null;
-        continue;
-      }
-      return (region, district);
-    }
-    return null;
+  // Driver liniyasi endi faqat viloyat juftligi (backend Tuman darajasini
+  // umuman tekshirmaydi/saqlamaydi — driver.service.ts), shuning uchun
+  // bitta viloyat tanlash sahifasi kifoya.
+  Future<GeoRegion?> _pickRegion(String title) {
+    return Navigator.push<GeoRegion>(
+      context,
+      _slideRoute(RegionPickerPage(title: title)),
+    );
   }
 
   Future<void> _startAddRouteFlow() async {
@@ -254,15 +238,13 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
 
     final locale = ref.read(localeProvider).languageCode;
 
-    final fromResult = await _pickRegionAndDistrict(AppStrings.get('from_question', locale));
-    if (fromResult == null || !mounted) return;
-    final (fromRegion, fromDistrict) = fromResult;
+    final fromRegion = await _pickRegion(AppStrings.get('from_question', locale));
+    if (fromRegion == null || !mounted) return;
 
-    final toResult = await _pickRegionAndDistrict(AppStrings.get('to_question', locale));
-    if (toResult == null || !mounted) return;
-    final (toRegion, toDistrict) = toResult;
+    final toRegion = await _pickRegion(AppStrings.get('to_question', locale));
+    if (toRegion == null || !mounted) return;
 
-    final routeName = '${fromDistrict.name} → ${toDistrict.name}';
+    final routeName = '${fromRegion.name} → ${toRegion.name}';
 
     final duration = await showModalBottomSheet<int>(
       context: context,
@@ -284,8 +266,8 @@ class _DriverLineScreenState extends ConsumerState<DriverLineScreen> {
 
     try {
       await ref.read(driverRepositoryProvider).createDriverLine(
-        fromRegionId: fromRegion.id, fromDistrictId: fromDistrict.id,
-        toRegionId: toRegion.id, toDistrictId: toDistrict.id,
+        fromRegionId: fromRegion.id,
+        toRegionId: toRegion.id,
         durationHours: duration,
       );
       if (!mounted) return;

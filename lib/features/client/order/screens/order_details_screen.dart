@@ -257,16 +257,64 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       if (mounted) Navigator.pop(context, created);
     } catch (e) {
       if (!mounted) return;
-      // Yo'nalish (shahar juftligi) hozircha faol bo'lmasa backend 400
-      // bilan javob beradi va o'z xabarida aniq qaysi yo'nalish ekanini
-      // aytadi — shu aniq matn to'g'ridan-to'g'ri modalda ko'rsatiladi.
+      // Yo'nalish (viloyat) hozircha faol bo'lmasa yoki manzil umuman
+      // aniqlanmasa backend 400 + reasonKey bilan javob beradi — shu ikkala
+      // holat foydalanuvchiga alohida, tushunarli xabar bilan ko'rsatiladi.
       if (e is OrderCreationException && e.reasonKey == 'bad_request') {
         setState(() => _loading = false);
-        _showInactiveRouteDialog(e.serverMessage);
+        if (e.backendReasonKey == 'location_unresolved') {
+          _showLocationUnresolvedDialog(e.point);
+        } else if (e.backendReasonKey == 'region_inactive') {
+          _showInactiveRouteDialog(
+            AppStrings.get('region_inactive_dialog_message', locale).replaceFirst('{region}', e.regionName ?? ''),
+          );
+        } else {
+          _showInactiveRouteDialog(e.serverMessage);
+        }
         return;
       }
       setState(() { _loading = false; _error = _errorMessage(e, locale); });
     }
+  }
+
+  Future<void> _showLocationUnresolvedDialog(String? point) async {
+    final locale = ref.read(localeProvider).languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final message = point == 'A'
+        ? AppStrings.get('location_unresolved_from_message', locale)
+        : point == 'B'
+            ? AppStrings.get('location_unresolved_to_message', locale)
+            : AppStrings.get('generic_error', locale);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          AppStrings.get('location_unresolved_title', locale),
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+            fontWeight: FontWeight.w700, fontSize: 16,
+          ),
+        ),
+        content: Text(
+          message,
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+            fontSize: 13,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              AppStrings.get('close', locale),
+              style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showInactiveRouteDialog(String? serverMessage) async {

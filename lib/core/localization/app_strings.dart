@@ -395,6 +395,10 @@ class AppStrings {
       'route_inactive_title': 'Bu yo\'nalish hozircha faol emas',
       'route_inactive_message': 'Tez orada faol bo\'ladi, xabardor qilamiz',
       'route_inactive_badge': 'Hozircha faol emas',
+      'location_unresolved_title': 'Manzil aniqlanmadi',
+      'location_unresolved_from_message': 'Boshlanish nuqtangizni aniqlab bo\'lmadi. Iltimos, boshqa manzil tanlang.',
+      'location_unresolved_to_message': 'Borish manzilingizni aniqlab bo\'lmadi. Iltimos, boshqa manzil tanlang.',
+      'region_inactive_dialog_message': '{region} yo\'nalishi hozircha xizmat ko\'rsatilmayapti. Tez orada faollashtiramiz.',
       // ==== Haydovchi liniyasi / rejalashtirilgan buyurtmalar ====
       'my_line': 'Mening yo\'nalishim',
       'scheduled_orders_title': 'Rejalashtirilgan buyurtmalar',
@@ -876,6 +880,10 @@ class AppStrings {
       'route_inactive_title': 'Это направление пока не активно',
       'route_inactive_message': 'Скоро станет активным, мы вас уведомим',
       'route_inactive_badge': 'Пока не активно',
+      'location_unresolved_title': 'Адрес не определён',
+      'location_unresolved_from_message': 'Не удалось определить точку отправления. Пожалуйста, выберите другой адрес.',
+      'location_unresolved_to_message': 'Не удалось определить адрес назначения. Пожалуйста, выберите другой адрес.',
+      'region_inactive_dialog_message': 'Направление {region} пока не обслуживается. Скоро мы его активируем.',
       // ==== Линия водителя / запланированные заказы ====
       'my_line': 'Мой маршрут',
       'scheduled_orders_title': 'Запланированные заказы',
@@ -1357,6 +1365,10 @@ class AppStrings {
       'route_inactive_title': 'This route is not active yet',
       'route_inactive_message': 'It will be active soon, we\'ll notify you',
       'route_inactive_badge': 'Not active yet',
+      'location_unresolved_title': 'Address not resolved',
+      'location_unresolved_from_message': 'We couldn\'t determine your pickup point. Please choose a different address.',
+      'location_unresolved_to_message': 'We couldn\'t determine your destination. Please choose a different address.',
+      'region_inactive_dialog_message': 'The {region} route is not served yet. We\'ll activate it soon.',
       // ==== Driver line / scheduled orders ====
       'my_line': 'My route',
       'scheduled_orders_title': 'Scheduled orders',

@@ -257,14 +257,14 @@ class DriverRepository {
   }
 
   Future<Map<String, dynamic>> createDriverLine({
-    required String fromRegionId, required String fromDistrictId,
-    required String toRegionId, required String toDistrictId,
+    required String fromRegionId,
+    required String toRegionId,
     int durationHours = 12,
   }) async {
     try {
       final res = await _dio.post('/driver/lines', data: {
-        'fromRegionId': fromRegionId, 'fromDistrictId': fromDistrictId,
-        'toRegionId': toRegionId, 'toDistrictId': toDistrictId,
+        'fromRegionId': fromRegionId,
+        'toRegionId': toRegionId,
         'durationHours': durationHours,
       });
       return Map<String, dynamic>.from(res.data['data']);

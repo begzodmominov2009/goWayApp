@@ -18,7 +18,24 @@ class OrderCreationException implements Exception {
   // javob tanasidagi aniq 'message' matni — UI shu matnni to'g'ridan-to'g'ri
   // ko'rsatishi mumkin (masalan "Toshkent yo'nalishingiz hali faol emas").
   final String? serverMessage;
-  OrderCreationException(this.reasonKey, this.debugMessage, {this.serverMessage});
+  // Backend order-errors.ts/OrderLocationError dan kelgan aniq sabab —
+  // 'location_unresolved' (manzil hech qaysi viloyatga bog'lanmadi) yoki
+  // 'region_inactive' (viloyat aniqlandi, lekin hali faol emas). UI shu
+  // asosda ikkala holatni alohida xabar bilan ko'rsatadi.
+  final String? backendReasonKey;
+  // location_unresolved uchun: qaysi nuqta muammoli — 'A' (jo'nash) yoki
+  // 'B' (borish).
+  final String? point;
+  // region_inactive uchun: hali faol bo'lmagan viloyat nomi.
+  final String? regionName;
+  OrderCreationException(
+    this.reasonKey,
+    this.debugMessage, {
+    this.serverMessage,
+    this.backendReasonKey,
+    this.point,
+    this.regionName,
+  });
 
   @override
   String toString() => 'OrderCreationException($reasonKey): $debugMessage';
@@ -134,7 +151,16 @@ class ClientRepository {
         }
         final data = e.response?.data;
         final serverMsg = (data is Map && data['message'] is String) ? data['message'] as String : null;
-        return OrderCreationException('bad_request', 'HTTP $status', serverMessage: serverMsg);
+        final backendReasonKey = (data is Map && data['reasonKey'] is String) ? data['reasonKey'] as String : null;
+        final point = (data is Map && data['point'] is String) ? data['point'] as String : null;
+        final regionName = (data is Map && data['regionName'] is String) ? data['regionName'] as String : null;
+        return OrderCreationException(
+          'bad_request', 'HTTP $status',
+          serverMessage: serverMsg,
+          backendReasonKey: backendReasonKey,
+          point: point,
+          regionName: regionName,
+        );
       default:
         return OrderCreationException('unknown', e.message ?? e.toString());
     }
