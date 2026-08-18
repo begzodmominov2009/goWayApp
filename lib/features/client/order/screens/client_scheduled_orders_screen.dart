@@ -130,7 +130,14 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     // ustiga ochilganda orqada osilib qolmasligi uchun oldindan unfocus
     // qilinadi — bottom-sheet o'z ustida yangi TextField so'ramaydi,
     // shuning uchun bu qadam bo'lmasa klaviatura fonda ochiq qolishi mumkin.
-    FocusScope.of(context).unfocus();
+    // FocusScope.of(context) EMAS — u chaqirilgan context'ni ambient
+    // fokus scope'ga InheritedWidget bog'liqligi sifatida ro'yxatdan
+    // o'tkazadi, shuning uchun keyinroq modal route fokusni o'zgartirganda
+    // BUTUN EKRAN (shu Widget) qayta quriladi (o'lchov bilan tasdiqlandi:
+    // shu qatorsiz modal ochilishida ScreenState.build 2 marta ortiqcha
+    // ishlagan). FocusManager orqali imperativ chaqiruv bunday bog'liqlik
+    // qoldirmaydi.
+    FocusManager.instance.primaryFocus?.unfocus();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -178,7 +185,7 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
       // bo'lib qolmaydi).
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () => FocusScope.of(context).unfocus(),
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: SafeArea(
         child: Column(
           children: [
