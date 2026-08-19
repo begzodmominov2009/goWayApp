@@ -442,6 +442,21 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
 
 String _shortTripId(String id) => id.isEmpty ? '' : (id.length >= 6 ? id.substring(0, 6) : id).toUpperCase();
 
+// Backend CANCELLED buyurtma bilan cancelReason ('CLIENT' |
+// 'SYSTEM_NO_DRIVER' | null) yuboradi. null — normal holat (masalan eski,
+// bu maydon qo'shilishidan oldingi buyurtmalar), xato emas — shu holatda
+// sabab umuman ko'rsatilmaydi, faqat "Bekor qilindi" qoladi.
+String? _cancelReasonText(Map<String, dynamic> order, String locale) {
+  switch (order['cancelReason'] as String?) {
+    case 'CLIENT':
+      return AppStrings.get('cancel_reason_client', locale);
+    case 'SYSTEM_NO_DRIVER':
+      return AppStrings.get('cancel_reason_no_driver', locale);
+    default:
+      return null;
+  }
+}
+
 String _time12h(DateTime date) {
   final local = date.toLocal();
   final period = local.hour >= 12 ? 'PM' : 'AM';
@@ -555,9 +570,13 @@ class _DetailedOrderCard extends StatelessWidget {
                   Text(priceText, style: TextStyle(fontSize: 14, color: textSecondary, decoration: TextDecoration.lineThrough)),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(AppStrings.get('order_cancelled', locale),
-                      style: const TextStyle(fontSize: 12, color: AppTheme.errorColor, fontWeight: FontWeight.w600),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    _cancelReasonText(order, locale) != null
+                        ? '${AppStrings.get('order_cancelled', locale)} · ${_cancelReasonText(order, locale)}'
+                        : AppStrings.get('order_cancelled', locale),
+                    style: const TextStyle(fontSize: 12, color: AppTheme.errorColor, fontWeight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ] else ...[
                 Expanded(child: Text(priceText, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary))),
@@ -654,9 +673,13 @@ class _CompactOrderCard extends StatelessWidget {
                   Text(priceText, style: TextStyle(fontSize: 13, color: textSecondary, decoration: TextDecoration.lineThrough)),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(AppStrings.get('order_cancelled', locale),
-                      style: const TextStyle(fontSize: 11, color: AppTheme.errorColor, fontWeight: FontWeight.w600),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    _cancelReasonText(order, locale) != null
+                        ? '${AppStrings.get('order_cancelled', locale)} · ${_cancelReasonText(order, locale)}'
+                        : AppStrings.get('order_cancelled', locale),
+                    style: const TextStyle(fontSize: 11, color: AppTheme.errorColor, fontWeight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ] else
                 Expanded(child: Text(priceText, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textPrimary))),

@@ -107,7 +107,26 @@ class SocketService {
     });
   }
 
-  void off(String event) {
-    _socket?.off(event);
+  // Buyurtma bekor qilinganda tingla (client tomonidan yoki tizim
+  // tomonidan — masalan haydovchi topilmagani uchun). Backend faqat
+  // { orderId } yuboradi. Ro'yxatdan chiqarilgan handler referensini
+  // qaytaradi — bir nechta ekran (masalan driver_home_screen.dart va
+  // driver_scheduled_orders_screen.dart) mustaqil obuna bo'lishi mumkin,
+  // shuning uchun off() chaqirilganda FAQAT shu handler o'chirilishi
+  // kerak (boshqa ekranning tinglovchisiga tegmasligi uchun).
+  dynamic Function(dynamic) onOrderCancelled(void Function(String orderId) callback) {
+    void handler(dynamic data) {
+      final orderId = data is Map ? data['orderId'] as String? : null;
+      if (orderId != null) callback(orderId);
+    }
+    _socket?.on('order:cancelled', handler);
+    return handler;
+  }
+
+  // `handler` berilsa — faqat o'sha bitta tinglovchi olib tashlanadi
+  // (masalan onOrderCancelled() qaytargan referens). Berilmasa — shu
+  // event uchun BARCHA tinglovchilar olib tashlanadi (eski xatti-harakat).
+  void off(String event, [dynamic Function(dynamic)? handler]) {
+    _socket?.off(event, handler);
   }
 }

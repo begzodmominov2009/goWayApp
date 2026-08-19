@@ -138,6 +138,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
   int _unreadNotifCount = 0;
   Timer? _notifCountTimer;
 
+  // order:cancelled tinglovchisining o'zi (dispose'da FAQAT shu
+  // tinglovchini olib tashlash uchun — driver_scheduled_orders_screen.dart
+  // ham mustaqil obuna bo'ladi, ikkalasi bir-biriga tegmasligi kerak).
+  dynamic Function(dynamic)? _orderCancelledHandler;
+
   double get _routeProgress {
     final initial = _initialDistanceKm;
     final current = _routeDistKm;
@@ -185,6 +190,29 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
       ref.read(socketServiceProvider).onNotification((data) {
         if (!mounted) return;
         _loadUnreadNotifCount();
+      });
+      // Client (yoki tizim, masalan haydovchi topilmagani uchun) buyurtmani
+      // bekor qilsa — driver ekranida "osilib qolmasligi" uchun. Ikkita
+      // holat: (a) driver ALLAQACHON qabul qilgan (_activeOrder) — kuzatuv
+      // to'xtatilib, oddiy holatga qaytariladi (xuddi driverning o'zi
+      // bekor qilgani kabi, _clearActiveOrder() qayta ishlatiladi); (b)
+      // driverga hali TAKLIF qilingan, hali qabul qilinmagan (_currentOrder)
+      // — taklif kartochkasi olib tashlanadi.
+      _orderCancelledHandler = ref.read(socketServiceProvider).onOrderCancelled((orderId) {
+        if (!mounted) return;
+        if (_activeOrder != null && _activeOrder!['id'] == orderId) {
+          _clearActiveOrder();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppStrings.get('order_cancelled', ref.read(localeProvider).languageCode)),
+              backgroundColor: AppTheme.warningColor,
+            ),
+          );
+          return;
+        }
+        if (_currentOrder != null && _currentOrder!['id'] == orderId) {
+          setState(() { _hasOrder = false; _currentOrder = null; _currentOfferId = null; });
+        }
       });
     } catch (_) {}
   }
@@ -314,6 +342,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     _trackingTimer?.cancel();
     _notifCountTimer?.cancel();
     _mapObjectsNotifier.dispose();
+    if (_orderCancelledHandler != null) {
+      ref.read(socketServiceProvider).off('order:cancelled', _orderCancelledHandler);
+    }
     ref.read(socketServiceProvider).disconnect();
     super.dispose();
   }

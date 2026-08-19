@@ -6,17 +6,12 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../shared/widgets/close_circle_button.dart';
+import '../../../../shared/widgets/animated_clear_button.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
   reverseDuration: const Duration(milliseconds: 320),
 );
-
-// Qidiruv inputining fokus animatsiyasi (Telegram uslubida qisqarish/X
-// tugmasi paydo bo'lishi) — butun animatsiya shu bitta davomiylik/egri
-// chiziqda, silliq va izchil ko'rinishi uchun.
-const Duration _kSearchAnimDuration = Duration(milliseconds: 260);
-const Curve _kSearchAnimCurve = Curves.easeOutCubic;
 
 /// Client o'zi rejalashtirgan (SCHEDULED holatidagi) buyurtmalari ro'yxati.
 /// driver_scheduled_orders_screen.dart namuna sifatida olingan — "Bugun"/
@@ -50,7 +45,6 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
   // uzun bo'lsa, setState bilan butun ekranni qayta qurish yozishni
   // sezilarli sekinlashtirar edi.
   final _searchQuery = ValueNotifier<String>('');
-  bool _searchActive = false;
 
   @override
   void initState() {
@@ -58,10 +52,6 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     _load();
     _searchCtrl.addListener(() {
       _searchQuery.value = _searchCtrl.text.trim().toLowerCase();
-    });
-    _searchFocus.addListener(() {
-      if (!mounted) return;
-      setState(() => _searchActive = _searchFocus.hasFocus);
     });
   }
 
@@ -91,16 +81,6 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
   void _switchDay(String day) {
     if (_day == day) return;
     setState(() => _day = day);
-  }
-
-  // X tugmasi bosilganda (matn bo'sh bo'lsa ham) — matn tozalanadi (agar
-  // bor bo'lsa), fokus olib tashlanadi (klaviatura yopiladi, kursor
-  // yo'qoladi). _searchActive holati _searchFocus listener orqali
-  // avtomatik yangilanadi, shuning uchun bu yerda alohida setState shart
-  // emas.
-  void _clearSearch() {
-    _searchCtrl.clear();
-    _searchFocus.unfocus();
   }
 
   bool _matchesSearch(Map<String, dynamic> order, String query) {
@@ -173,7 +153,6 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
-    final closeBtnBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
 
     return Scaffold(
       backgroundColor: surface,
@@ -259,46 +238,7 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
                       ),
                     ),
                   ),
-                  // X tugmasi — input fokusda bo'lganda "o'ngdan sirg'alib
-                  // chiqadi" (widthFactor 0->1 + slide + fade, hammasi bir
-                  // xil davomiylikda). ClipRect + AnimatedAlign(widthFactor)
-                  // — tugma o'z tabiiy o'lchamini saqlab, faqat ajratilgan
-                  // joy silliq o'sib/qisqaradi, shu bilan qo'shni qidiruv
-                  // maydoni (Expanded) har kadrda avtomatik moslashadi va
-                  // layout sakramaydi.
-                  ClipRect(
-                    child: AnimatedAlign(
-                      duration: _kSearchAnimDuration,
-                      curve: _kSearchAnimCurve,
-                      alignment: Alignment.centerRight,
-                      widthFactor: _searchActive ? 1.0 : 0.0,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: IgnorePointer(
-                          ignoring: !_searchActive,
-                          child: AnimatedSlide(
-                            duration: _kSearchAnimDuration,
-                            curve: _kSearchAnimCurve,
-                            offset: _searchActive ? Offset.zero : const Offset(0.4, 0),
-                            child: AnimatedOpacity(
-                              duration: _kSearchAnimDuration,
-                              curve: _kSearchAnimCurve,
-                              opacity: _searchActive ? 1 : 0,
-                              child: GestureDetector(
-                                onTap: _clearSearch,
-                                child: Container(
-                                  width: 40, height: 40,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(color: closeBtnBg, shape: BoxShape.circle),
-                                  child: Icon(Icons.close, size: 18, color: textSecondary),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  AnimatedClearButton(controller: _searchCtrl, focusNode: _searchFocus),
                 ],
               ),
             ),

@@ -9,6 +9,7 @@ import '../../../../core/network/geo_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/animated_clear_button.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/close_circle_button.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -1217,52 +1218,58 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: border),
-                    ),
-                    child: TextField(
-                      controller: _ctrl,
-                      focusNode: _focus,
-                      onChanged: _onChanged,
-                      style: TextStyle(fontSize: 14, color: textPrimary),
-                      decoration: InputDecoration(
-                        hintText: AppStrings.get('search_address_hint', locale),
-                        hintStyle: TextStyle(color: textSecondary, fontSize: 14),
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_ctrl.text.isNotEmpty)
-                              IconButton(
-                                icon: Icon(Icons.close, size: 16, color: textSecondary),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border),
+                          ),
+                          child: TextField(
+                            controller: _ctrl,
+                            focusNode: _focus,
+                            onChanged: _onChanged,
+                            style: TextStyle(fontSize: 14, color: textPrimary),
+                            decoration: InputDecoration(
+                              hintText: AppStrings.get('search_address_hint', locale),
+                              hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.map_outlined, size: 18, color: AppTheme.primaryColor),
                                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                 padding: EdgeInsets.zero,
-                                onPressed: () { _ctrl.clear(); setState(() => _results = []); },
+                                onPressed: _openMapPicker,
                               ),
-                            IconButton(
-                              icon: const Icon(Icons.map_outlined, size: 18, color: AppTheme.primaryColor),
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              padding: EdgeInsets.zero,
-                              onPressed: _openMapPicker,
+                              // Standart 48x48 minimal maydonni bekor qiladi —
+                              // aks holda 44px balandlikdagi konteynerdan
+                              // chiqib ketishi mumkin edi.
+                              suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                             ),
-                          ],
+                          ),
                         ),
-                        // Standart 48x48 minimal maydonni bekor qiladi —
-                        // aks holda Row ikkita IconButton bilan 44px
-                        // balandlikdagi konteynerdan chiqib ketib, RenderFlex
-                        // overflow ogohlantirishiga olib kelishi mumkin edi.
-                        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                       ),
-                    ),
+                      // X tugmasi — client_scheduled_orders_screen.dart dagi
+                      // bilan bir xil naqsh: inputning suffixIcon'i EMAS,
+                      // uning YONIDA (tashqarisida), Row'da alohida element
+                      // sifatida. Shu bilan input o'zi Expanded orqali fokus
+                      // olganda silliq qisqarib, X yonidan sirg'alib chiqadi
+                      // — 44px balandlikdagi input ichiga zich sig'dirishga
+                      // urinish (avval suffixIcon ichida edi) yo'q.
+                      AnimatedClearButton(
+                        controller: _ctrl,
+                        focusNode: _focus,
+                        onCleared: () => setState(() => _results = []),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),

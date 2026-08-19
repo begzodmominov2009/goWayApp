@@ -10,6 +10,7 @@ import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/driver_repository.dart';
 import '../../../../core/network/geo_repository.dart';
+import '../../../../core/network/socket_service.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/tutorial_sheet.dart';
 
@@ -37,12 +38,47 @@ class _DriverScheduledOrdersScreenState extends ConsumerState<DriverScheduledOrd
   String? _selectedLineId;
   String _selectedLineLabel = '';
 
+  // order:cancelled tinglovchisi — bu ekran hali HECH bir driverga
+  // biriktirilmagan (SCHEDULED) buyurtmalar ro'yxatini ko'rsatadi. Client
+  // biror buyurtmani bekor qilsa, u shu ro'yxatdan darhol olib tashlanadi
+  // — aks holda driver allaqachon bekor qilingan buyurtmani "qabul
+  // qilish"ga urinib, tushunarsiz xatoga duch kelishi mumkin edi.
+  // Ulanish HAYOT SIKLI (connect/disconnect) driver_home_screen.dart
+  // zimmasida — bu ekran shu route ustiga push qilingani uchun Home
+  // hali mounted holda qoladi. Quyidagi connect() chaqiruvi shunchaki
+  // ehtiyot chorasi (idempotent — SocketService.connect() ichida
+  // `if (isConnected) return;` bor, shuning uchun Home allaqachon
+  // ulangan bo'lsa hech narsa qilmaydi); bu ekran disconnect()ni HECH
+  // QACHON chaqirmaydi va faqat OʻZ tinglovchisini (handler referensi
+  // orqali) qoʻshadi/olib tashlaydi.
+  dynamic Function(dynamic)? _orderCancelledHandler;
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadDriverLines();
     _maybeShowScheduledTutorial();
+    _initOrderCancelledListener();
+  }
+
+  Future<void> _initOrderCancelledListener() async {
+    try {
+      await ref.read(socketServiceProvider).connect();
+      if (!mounted) return;
+      _orderCancelledHandler = ref.read(socketServiceProvider).onOrderCancelled((orderId) {
+        if (!mounted) return;
+        setState(() => _orders.removeWhere((o) => o['id'] == orderId));
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    if (_orderCancelledHandler != null) {
+      ref.read(socketServiceProvider).off('order:cancelled', _orderCancelledHandler);
+    }
+    super.dispose();
   }
 
   Future<void> _maybeShowScheduledTutorial() async {
