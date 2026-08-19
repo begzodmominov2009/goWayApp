@@ -56,6 +56,40 @@ class OrderCancelException implements Exception {
   String toString() => 'OrderCancelException($reasonKey): $debugMessage';
 }
 
+/// GET /orders/my javobi — backend endi flat array emas,
+/// { orders: [...], pagination: { total, page, limit, totalPages } }
+/// shaklida qaytaradi. `hasMore` — sahifalab yuklashda keyingi sahifa
+/// so'ralishi kerakmi yo'qmi shuni bildiradi.
+class OrdersPage {
+  final List<Map<String, dynamic>> orders;
+  final int page;
+  final int limit;
+  final int total;
+  final int totalPages;
+
+  OrdersPage({
+    required this.orders,
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.totalPages,
+  });
+
+  bool get hasMore => page < totalPages;
+
+  factory OrdersPage.fromData(Map<String, dynamic> data) {
+    final ordersRaw = data['orders'] as List? ?? const [];
+    final pagination = data['pagination'] as Map? ?? const {};
+    return OrdersPage(
+      orders: ordersRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      page: (pagination['page'] as num?)?.toInt() ?? 1,
+      limit: (pagination['limit'] as num?)?.toInt() ?? ordersRaw.length,
+      total: (pagination['total'] as num?)?.toInt() ?? ordersRaw.length,
+      totalPages: (pagination['totalPages'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
+
 class ClientRepository {
   final Dio _dio;
   ClientRepository(this._dio);
@@ -181,11 +215,29 @@ class ClientRepository {
     }
   }
 
-  // Buyurtmalar tarixi
+  // Buyurtmalar tarixi — sahifalab (page/limit query orqali). Backend
+  // javobi { orders: [...], pagination: {...} } shaklida (eski flat
+  // array emas).
+  // `status` — ixtiyoriy, berilsa faqat shu statuslardagi buyurtmalar
+  // (backend '?status=A,B' — vergul bilan ajratilgan qiymatlarni kutadi).
+  // Berilmasa (null/bo'sh), backend hamma statusni qaytaradi — hozirgi
+  // xatti-harakat o'zgarmaydi.
+  Future<OrdersPage> getOrdersPage({int page = 1, int limit = 20, List<String>? status}) async {
+    final res = await _dio.get('/orders/my', queryParameters: {
+      'page': page,
+      'limit': limit,
+      if (status != null && status.isNotEmpty) 'status': status.join(','),
+    });
+    return OrdersPage.fromData(Map<String, dynamic>.from(res.data['data']));
+  }
+
+  // Sahifalashsiz (eski) chaqiruvchilar uchun — faqat buyurtmalar
+  // ro'yxatini qaytaradi, pagination bilan ishlamaydi. limit backend
+  // ruxsat bergan maksimum (100) — bu chaqiruvchilar oldin "hammasi"ni
+  // olardi, shu bilan xatti-harakat imkon qadar saqlanadi.
   Future<List<Map<String, dynamic>>> getOrders() async {
-    final res = await _dio.get('/orders/my');
-    final list = res.data['data'] as List;
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+    final result = await getOrdersPage(limit: 100);
+    return result.orders;
   }
 
   // Buyurtma detail

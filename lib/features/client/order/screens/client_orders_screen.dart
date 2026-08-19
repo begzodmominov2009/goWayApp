@@ -15,12 +15,6 @@ final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
 
 enum _FilterType { all, accepted, cancelled }
 
-// "Buyurtmalarim" endi faqat YAKUNLANGAN buyurtmalar tarixi — kutilayotgan
-// (SEARCHING/SCHEDULED) va faol (ACCEPTED va undan keyingi) buyurtmalar
-// endi o'z alohida sahifalariga ega (ClientScheduledOrdersScreen,
-// ClientActiveOrdersScreen).
-const List<String> _kHistoryStatuses = ['COMPLETED', 'DELIVERED', 'CANCELLED'];
-
 class ClientOrdersScreen extends ConsumerStatefulWidget {
   const ClientOrdersScreen({super.key});
 
@@ -29,16 +23,27 @@ class ClientOrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
-  // Buyurtmalar tarixi keshdan (clientOrdersHistoryCacheProvider) o'qiladi,
-  // faqat yakunlangan/bekor qilingan holatlar shu yerda ko'rsatiladi.
+  // Buyurtmalar tarixi keshdan (clientOrdersHistoryCacheProvider — FAQAT
+  // 1-sahifa) + mahalliy holatda saqlanadigan keyingi sahifalar
+  // (_extraOrders, pastga tortib "load more" bilan yuklanadi) birlashtirib
+  // ko'rsatiladi. Backend so'rovning o'zida kHistoryOrderStatuses bilan
+  // filtrlanadi (order.service.ts: where.status = { in: statuses } — aniq
+  // moslik), shuning uchun bu yerda qo'shimcha status filtri shart emas.
   List<Map<String, dynamic>> get _orders {
-    final all = ref.read(clientOrdersHistoryCacheProvider).valueOrNull ?? const [];
-    return all.where((o) => _kHistoryStatuses.contains(o['status'] as String? ?? '')).toList();
+    final page1 = ref.read(clientOrdersHistoryCacheProvider).valueOrNull;
+    return [...(page1?.orders ?? const []), ..._extraOrders];
   }
 
   _FilterType _filter = _FilterType.all;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
+
+  // ==== Sahifalash (2-sahifadan boshlab) ====
+  final _scrollCtrl = ScrollController();
+  List<Map<String, dynamic>> _extraOrders = [];
+  int _currentPage = 1;
+  bool _hasMore = false;
+  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -47,16 +52,52 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
     _searchCtrl.addListener(() {
       setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
     });
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final position = _scrollCtrl.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  // Bir vaqtda faqat bitta so'rov (himoya: _loadingMore) va oxirgi
+  // sahifaga yetilgach yangi so'rov yubormaslik (himoya: _hasMore).
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final result = await ref.read(clientRepositoryProvider).getOrdersPage(
+            page: _currentPage + 1,
+            limit: kClientOrdersPageSize,
+            status: kHistoryOrderStatuses,
+          );
+      if (!mounted) return;
+      setState(() {
+        _extraOrders = [..._extraOrders, ...result.orders];
+        _currentPage = result.page;
+        _hasMore = result.hasMore;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+    }
+  }
+
   // Majburiy yangilash — appbar "refresh" tugmasi, pull-to-refresh va
-  // buyurtma bekor qilingandan keyin.
+  // buyurtma bekor qilingandan keyin. 1-sahifadan qayta boshlaydi —
+  // qo'shimcha sahifalar (_extraOrders) pastdagi ref.listen orqali
+  // (build()da) 1-sahifa yangi ma'lumot bilan kelganda tozalanadi.
   Future<void> _load() async {
     await ref.read(clientOrdersHistoryCacheProvider.notifier).forceRefresh();
   }
@@ -210,6 +251,20 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 1-sahifa keshi yangi ma'lumot bilan yangilanganda (forceRefresh —
+    // pull-to-refresh/appbar tugmasi/refreshIfStale) mahalliy sahifalash
+    // holati tozalanadi, shunda eski qo'shimcha sahifalar yangi 1-sahifa
+    // ustiga qolib ketmaydi.
+    ref.listen<AsyncValue<OrdersPage>>(clientOrdersHistoryCacheProvider, (previous, next) {
+      final page = next.valueOrNull;
+      if (page == null || identical(previous?.valueOrNull, page)) return;
+      setState(() {
+        _extraOrders = [];
+        _currentPage = 1;
+        _hasMore = page.hasMore;
+      });
+    });
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
@@ -320,8 +375,10 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView(
+                          controller: _scrollCtrl,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: grouped.entries.map((entry) {
+                          children: [
+                            ...grouped.entries.map((entry) {
                             final isRecent = entry.key == todayLabel || entry.key == yesterdayLabel;
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,7 +424,13 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
                                 }),
                               ],
                             );
-                          }).toList(),
+                            }),
+                            if (_loadingMore)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20),
+                                child: Center(child: AppLoadingIndicator()),
+                              ),
+                          ],
                         ),
                       ),
           ),

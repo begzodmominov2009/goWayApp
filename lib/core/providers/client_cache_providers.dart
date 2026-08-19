@@ -84,16 +84,33 @@ final clientProfileCacheProvider =
 
 // ---------------------------------------------------------------------------
 // Buyurtmalar tarixi (ClientOrdersScreen shu keshdan foydalanadi).
+// Faqat BIRINCHI sahifani keshlaydi (page=1) — keyingi sahifalar
+// (cho'zilib boruvchi ro'yxat/"load more") ClientOrdersScreen ichida
+// mahalliy holatda saqlanadi, bu umumiy kesh abstraktsiyasiga
+// tegmaydi (u boshqa bir nechta provider — profil, truck, manzil —
+// uchun ham ishlatiladi).
 // ---------------------------------------------------------------------------
-class ClientOrdersHistoryNotifier
-    extends _CachedClientNotifier<List<Map<String, dynamic>>> {
+const int kClientOrdersPageSize = 20;
+
+// "Buyurtmalarim" endi faqat YAKUNLANGAN buyurtmalar tarixi — kutilayotgan
+// (SEARCHING/SCHEDULED) va faol (ACCEPTED va undan keyingi) buyurtmalar
+// o'z alohida sahifalariga ega. Backend endi shu ro'yxatni ?status= query
+// orqali o'zi filtrlaydi (order.service.ts: where.status = { in: statuses }
+// — aniq moslik), shuning uchun ilova tarafida qo'shimcha filtrlash shart
+// emas.
+const List<String> kHistoryOrderStatuses = ['COMPLETED', 'DELIVERED', 'CANCELLED'];
+
+class ClientOrdersHistoryNotifier extends _CachedClientNotifier<OrdersPage> {
   @override
-  Future<List<Map<String, dynamic>>> fetch() =>
-      ref.read(clientRepositoryProvider).getOrders();
+  Future<OrdersPage> fetch() => ref.read(clientRepositoryProvider).getOrdersPage(
+        page: 1,
+        limit: kClientOrdersPageSize,
+        status: kHistoryOrderStatuses,
+      );
 }
 
-final clientOrdersHistoryCacheProvider = AsyncNotifierProvider<
-    ClientOrdersHistoryNotifier, List<Map<String, dynamic>>>(
+final clientOrdersHistoryCacheProvider =
+    AsyncNotifierProvider<ClientOrdersHistoryNotifier, OrdersPage>(
   ClientOrdersHistoryNotifier.new,
 );
 
