@@ -79,7 +79,20 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
   late TextEditingController _fromCtrl;
   late TextEditingController _toCtrl;
   final _cargoTypeCtrl = TextEditingController();
+  final _cargoTypeFocus = FocusNode();
   final _noteCtrl = TextEditingController();
+  final _noteFocus = FocusNode();
+
+  // Modal tepasidan chiqadigan ogohlantirish banneri (SnackBar o'rniga —
+  // SnackBar ScaffoldMessenger orqali pastki Scaffold'ga bog'lanadi va
+  // shu bottom-sheet modal ORQASIDA (past z-tartibda) chiqib, foydalanuvchi
+  // uni UMUMAN ko'rmaydi). _lastTopWarningText chiqish (fade-out)
+  // animatsiyasi davomida ham matn ko'rinib turishi uchun _topWarning
+  // null bo'lgandan keyin ham saqlanadi.
+  String? _topWarning;
+  String _lastTopWarningText = '';
+  Color _topWarningColor = AppTheme.errorColor;
+  Timer? _topWarningTimer;
 
   Place? _fromPlace;
   Place? _toPlace;
@@ -140,8 +153,11 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
     _fromCtrl.dispose();
     _toCtrl.dispose();
     _cargoTypeCtrl.dispose();
+    _cargoTypeFocus.dispose();
     _noteCtrl.dispose();
+    _noteFocus.dispose();
     _priceDebounce?.cancel();
+    _topWarningTimer?.cancel();
     super.dispose();
   }
 
@@ -219,6 +235,21 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
           _showRegionsListSheet();
         },
       ),
+    );
+  }
+
+  // Sarlavhalar yonidagi "?" bosilganda ochiladigan yordam tushuntirish
+  // modali — mavjud bottom-sheet uslubiga mos (drag tutqich +
+  // CloseCircleButton, radius 24). SnackBar EMAS — bu forma modali ham
+  // o'zining Scaffold'iga ega emas, shuning uchun SnackBar shu modal
+  // ORQASIDA chiqib ko'rinmay qolar edi.
+  Future<void> _showHelpSheet({required String title, required List<_InfoSection> sections}) {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      builder: (ctx) => _HelpInfoSheet(title: title, sections: sections),
     );
   }
 
@@ -383,11 +414,24 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
     }
   }
 
-  void _showValidationError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.errorColor),
-    );
+  // Modal TEPASIDAN chiqadigan ogohlantirish — SnackBar EMAS. Bu bottom
+  // sheet o'zining Scaffold'i yo'q, shuning uchun ScaffoldMessenger orqali
+  // chiqarilgan SnackBar pastdagi ekranning Scaffold'iga bog'lanadi va shu
+  // modal ORQASIDA (past z-tartibda) chiqib, foydalanuvchi uni umuman
+  // ko'rmaydi (masalan "vaqt 1 soatdan kam" xatosi shu sabab ko'rinmasdi).
+  void _showTopBanner(String message, {Color color = AppTheme.errorColor}) {
+    _topWarningTimer?.cancel();
+    setState(() {
+      _topWarning = message;
+      _lastTopWarningText = message;
+      _topWarningColor = color;
+    });
+    _topWarningTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _topWarning = null);
+    });
   }
+
+  void _showValidationError(String message) => _showTopBanner(message, color: AppTheme.errorColor);
 
   void _submit() {
     final locale = ref.read(localeProvider).languageCode;
@@ -502,7 +546,17 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
         ? _uniqueTrucks.firstWhere((t) => t['type'] == _selectedTruck, orElse: () => {})
         : null;
 
-    return Container(
+    // Klaviatura chiqqanda butun modal shu qadar yuqoriga suriladi — shu
+    // orqali ichkaridagi Expanded(SingleChildScrollView) uchun mavjud
+    // balandlik haqiqatan qisqaradi va TextField'ning standart "fokusda
+    // ko'rinadigan joyga o'zi scroll qilish" xulq-atvori to'g'ri ishlaydi
+    // (_AddressSearchModal'da ham xuddi shu naqsh ishlatilgan).
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
       decoration: BoxDecoration(
         color: surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -732,14 +786,13 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(AppStrings.get('vehicle_help_text', locale))),
-                                );
-                              },
+                              onPressed: () => _showHelpSheet(
+                                title: AppStrings.get('select_vehicle', locale),
+                                sections: [_InfoSection(body: AppStrings.get('vehicle_help_full', locale))],
+                              ),
                             ),
                           ]),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 6),
 
                           trucksLoading
                               ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
@@ -792,24 +845,21 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(AppStrings.get('weight_help_text', locale))),
-                                );
-                              },
+                              onPressed: () => _showHelpSheet(
+                                title: AppStrings.get('weight_tons', locale),
+                                sections: [_InfoSection(body: AppStrings.get('weight_help_full', locale))],
+                              ),
                             ),
                           ]),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Opacity(
                             opacity: _selectedTruck == null ? 0.6 : 1.0,
                             child: GestureDetector(
                               onTap: () {
                                 if (_selectedTruck == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(AppStrings.get('select_truck_first_warning', locale)),
-                                      backgroundColor: AppTheme.warningColor,
-                                    ),
+                                  _showTopBanner(
+                                    AppStrings.get('select_truck_first_warning', locale),
+                                    color: AppTheme.warningColor,
                                   );
                                   return;
                                 }
@@ -845,17 +895,38 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                           const SizedBox(height: 16),
 
                           Text(AppStrings.get('cargo_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _cargoTypeCtrl,
-                            maxLines: 1,
-                            style: TextStyle(fontSize: 13, color: textPrimary),
-                            decoration: InputDecoration(hintText: AppStrings.get('cargo_type_hint', locale), hintStyle: TextStyle(color: textSecondary)),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _cargoTypeCtrl,
+                                  focusNode: _cargoTypeFocus,
+                                  maxLines: 1,
+                                  style: TextStyle(fontSize: 13, color: textPrimary),
+                                  decoration: InputDecoration(hintText: AppStrings.get('cargo_type_hint', locale), hintStyle: TextStyle(color: textSecondary)),
+                                ),
+                              ),
+                              AnimatedClearButton(controller: _cargoTypeCtrl, focusNode: _cargoTypeFocus),
+                            ],
                           ),
                           const SizedBox(height: 16),
 
-                          Text(AppStrings.get('load_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                          const SizedBox(height: 8),
+                          Row(children: [
+                            Text(AppStrings.get('load_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => _showHelpSheet(
+                                title: AppStrings.get('load_type_label', locale),
+                                sections: [_InfoSection(body: AppStrings.get('load_type_help_full', locale))],
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
                           Row(children: [
                             Expanded(
                               child: _TimeTab(
@@ -877,8 +948,24 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                           ]),
                           const SizedBox(height: 16),
 
-                          Text(AppStrings.get('order_when_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                          const SizedBox(height: 8),
+                          Row(children: [
+                            Text(AppStrings.get('order_when_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => _showHelpSheet(
+                                title: AppStrings.get('order_when_label', locale),
+                                sections: [
+                                  _InfoSection(subtitle: AppStrings.get('order_type_now', locale), body: AppStrings.get('time_help_now', locale)),
+                                  _InfoSection(subtitle: AppStrings.get('order_type_today', locale), body: AppStrings.get('time_help_today', locale)),
+                                  _InfoSection(subtitle: AppStrings.get('order_type_tomorrow', locale), body: AppStrings.get('time_help_tomorrow', locale)),
+                                ],
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
                           Row(children: [
                             Expanded(
                               child: _TimeTab(
@@ -940,11 +1027,20 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                           ],
                           const SizedBox(height: 12),
 
-                          TextField(
-                            controller: _noteCtrl,
-                            maxLines: 1,
-                            style: TextStyle(fontSize: 13, color: textPrimary),
-                            decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _noteCtrl,
+                                  focusNode: _noteFocus,
+                                  maxLines: 1,
+                                  style: TextStyle(fontSize: 13, color: textPrimary),
+                                  decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
+                                ),
+                              ),
+                              AnimatedClearButton(controller: _noteCtrl, focusNode: _noteFocus),
+                            ],
                           ),
                           if (_priceLoading) ...[
                             const SizedBox(height: 16),
@@ -968,20 +1064,77 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
               ),
             ),
 
-            // Doimiy "Tasdiqlash" tugmasi
+            // Doimiy "Tasdiqlash" tugmasi — barcha MAJBURIY maydonlar
+            // to'ldirilmaguncha o'chiq turadi (Izoh MAJBURIY EMAS, shu
+            // sabab shartga kirmaydi). _cargoTypeCtrl.text faqat
+            // TextEditingController orqali o'zgaradi (setState
+            // chaqirmaydi), shuning uchun uni ValueListenableBuilder bilan
+            // tinglaymiz — shunda har harf kiritilganda FAQAT shu tugma
+            // qayta quriladi, butun modal emas (ortiqcha rebuild yo'q).
             Container(
               padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
               decoration: BoxDecoration(
                 color: surface,
                 border: Border(top: BorderSide(color: border)),
               ),
-              child: _GradBtn(
-                label: AppStrings.get('place_order', locale),
-                onTap: _submit,
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _cargoTypeCtrl,
+                builder: (context, cargoValue, _) {
+                  final canSubmit = _fromPlace != null &&
+                      _toPlace != null &&
+                      _selectedTruck != null &&
+                      _selectedWeight != null &&
+                      cargoValue.text.trim().isNotEmpty &&
+                      _selectedLoadType != null &&
+                      (!_isScheduled || (_selectedHour != null && _selectedMinute != null));
+                  return _GradBtn(
+                    label: AppStrings.get('place_order', locale),
+                    onTap: canSubmit ? _submit : null,
+                  );
+                },
               ),
             ),
           ],
         ),
+      ),
+          ),
+          // Modal tepasidan chiqadigan ogohlantirish banneri — Positioned
+          // orqali kontent ustiga (overlay) qo'yiladi, shu bilan pastdagi
+          // Column/ScrollView o'lchami o'zgarmaydi (layout sakramaydi).
+          // Yopish tugmasi (CloseCircleButton) bilan to'qnashmasligi uchun
+          // sarlavha qatoridan (48px) pastroqda joylashgan.
+          Positioned(
+            top: 56, left: 16, right: 16,
+            child: IgnorePointer(
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                offset: _topWarning != null ? Offset.zero : const Offset(0, -0.3),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  opacity: _topWarning != null ? 1 : 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _topWarningColor,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_lastTopWarningText,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1910,6 +2063,97 @@ class _TimePickerSheetState extends ConsumerState<_TimePickerSheet> {
                     AppStrings.get('apply', locale),
                     style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
                   ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// _HelpInfoSheet uchun bitta bo'lim — [subtitle] berilsa (masalan "Vaqt
+/// tanlash" uchun Hozir/Bugun/Ertaga), alohida kichik sarlavha bilan
+/// ajratib ko'rsatiladi; berilmasa faqat [body] chiqadi.
+class _InfoSection {
+  final String? subtitle;
+  final String body;
+  const _InfoSection({this.subtitle, required this.body});
+}
+
+/// Sarlavhalar yonidagi "?" bosilganda chiqadigan yordam tushuntirish
+/// modali — loyihadagi boshqa pastdan chiquvchi modallar bilan bir xil
+/// uslubda (drag tutqich + CloseCircleButton, radius 24, padding 20/12).
+/// Kirish parametrlari (title/sections) chaqiruvchi tomonda AppStrings
+/// bilan oldindan hal qilingan matnlar, shuning uchun bu widget'ning
+/// o'zi Riverpod/locale'ga bog'liq emas — faqat kerakli qism (shu
+/// modalning o'zi) quriladi, boshqa hech narsaga ta'sir qilmaydi.
+class _HelpInfoSheet extends StatelessWidget {
+  final String title;
+  final List<_InfoSection> sections;
+  const _HelpInfoSheet({required this.title, required this.sections});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Row(children: [
+              Expanded(
+                child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+              ),
+              CloseCircleButton(bg: tabBg, iconColor: textSecondary, onTap: () => Navigator.pop(context)),
+            ]),
+            const SizedBox(height: 14),
+            // Sarlavha qatori (tutqich + title + X) doim tepada qotib
+            // turishi uchun Column'ning ODDIY (flex bo'lmagan) farzandi
+            // sifatida qoladi; faqat bo'limlar qismi ConstrainedBox +
+            // shrinkWrap orqali cheklanadi — _TruckPickerSheet'dagi bilan
+            // bir xil naqsh (shu faylda allaqachon ishlatilgan). Natija:
+            // qisqa matnda Column shunchaki kichik bo'ladi (shrinkWrap
+            // tufayli ortiqcha bo'sh joy qolmaydi), uzun matnda esa
+            // maksimal balandlikdan oshib ketmay, o'zi ichida scroll
+            // qiladi (ekrandan chiqmaydi).
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final section in sections) ...[
+                      if (section.subtitle != null) ...[
+                        Text(section.subtitle!,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
+                        const SizedBox(height: 4),
+                      ],
+                      Text(section.body, style: TextStyle(fontSize: 13, color: textSecondary, height: 1.5)),
+                      if (section != sections.last) const SizedBox(height: 14),
+                    ],
+                  ],
                 ),
               ),
             ),
