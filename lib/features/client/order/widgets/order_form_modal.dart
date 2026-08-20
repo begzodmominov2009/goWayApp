@@ -52,14 +52,22 @@ final ButtonStyle _kHelpIconButtonStyle =
     IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap);
 
 /// Buyurtma yaratish formasi — manzil tanlash (SelectAddressScreen) va
-/// buyurtma tafsilotlari (OrderDetailsScreen) BITTA bottom-sheet modalga
-/// birlashtirilgan. Ekranning ~85% balandligini egallaydi.
+/// buyurtma tafsilotlari (OrderDetailsScreen) BITTA to'liq ekranli, OPAQUE
+/// sahifaga birlashtirilgan (avval bottom-sheet edi — bottom-sheet HAR DOIM
+/// `opaque: false`, shu sabab ustida ochiq turganda ham Flutter pastdagi
+/// Home'ni, jumladan native YandexMap'ni, har frame'da composite qilishda
+/// davom etardi; oddiy sahifa esa opaque, kirish animatsiyasi tugagach
+/// pastdagi marshrut UMUMAN chizilmaydi — xarita esa widget daraxtida tirik
+/// qoladi, qo'lda olib tashlash/tiklash shart emas). Sahifa pastdan
+/// yuqoriga siljib ochiladi/yopiladi — `orderFormPageRoute` (app_router.dart)
+/// orqali, drag-to-dismiss YO'Q (oddiy X tugma / tizim "orqaga" tugmasi bilan
+/// yopiladi — ikkalasi ham `Navigator.pop(context)`, natija `null`).
 ///
 /// Natija (Tasdiqlash bosilganda): {'fromPlace': Place, 'toPlace': Place,
 /// 'truckType': String, 'weight': double, 'loadType': String ('TOP'|'BACK'),
 /// 'cargoType': String?, 'note': String?, 'isScheduled': bool,
 /// 'scheduledFor': DateTime?, 'distKm': double?, 'timeMin': int?} — yoki
-/// null (modal yopilsa).
+/// null (sahifa yopilsa).
 Future<Map<String, dynamic>?> showOrderFormModal(
   BuildContext context, {
   Place? initialFrom,
@@ -67,21 +75,14 @@ Future<Map<String, dynamic>?> showOrderFormModal(
   required double fromLat,
   required double fromLng,
 }) {
-  return showModalBottomSheet<Map<String, dynamic>>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    enableDrag: true,
-    sheetAnimationStyle: _kSheetAnimationStyle,
-    builder: (ctx) => FractionallySizedBox(
-      heightFactor: 0.9,
-      child: _OrderFormModal(
-        initialFrom: initialFrom,
-        initialTo: initialTo,
-        fromLat: fromLat,
-        fromLng: fromLng,
-      ),
-    ),
+  return Navigator.push<Map<String, dynamic>>(
+    context,
+    orderFormPageRoute(_OrderFormModal(
+      initialFrom: initialFrom,
+      initialTo: initialTo,
+      fromLat: fromLat,
+      fromLng: fromLng,
+    )),
   );
 }
 
@@ -395,6 +396,13 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
       backgroundColor: Colors.transparent,
       enableDrag: true,
       sheetAnimationStyle: _kSheetAnimationStyle,
+      // useSafeArea: true — MUHIM. showModalBottomSheet standart holatda
+      // (useSafeArea: false) MediaQuery.removePadding(removeTop: true)
+      // qo'llaydi — bu ICHKI SafeArea(top: true)ni butunlay NO-OP qilib
+      // qo'yardi (X tugma status-bar bilan ustma-ust tushishi shu
+      // sabab edi). true qilinganda Flutter o'zi tashqi SafeArea(bottom:
+      // false) bilan o'raydi — top/left/right haqiqiy qiymatlarini oladi.
+      useSafeArea: true,
       builder: (ctx) => _AddressSearchModal(
         isFrom: isFrom, biasLat: widget.fromLat, biasLng: widget.fromLng,
       ),
@@ -597,45 +605,48 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
       // qayta quradi. viewInsetsOf faqat aynan shu maydon o'zgarganda
       // bog'liqlikni qo'zg'atadi.
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      child: Container(
+      // Endi to'liq ekranli OPAQUE sahifa (avval pastdan "chiqib turuvchi"
+      // bottom-sheet edi, shu sabab tepasi yumaloqlangan edi) — yumaloq
+      // burchak SHART EMAS: ekranning butun balandligini egallagani uchun
+      // yumaloq burchak faqat ekran cho'qqilarida sahifa ORQASIDAGI
+      // (PageRoute default fon) rangni ozgina ko'rsatib qo'yar edi.
+      color: surface,
       child: SafeArea(
-        top: false,
-        child: Column(
+        // 100% balandlikdagi sahifa ekranning eng tepasiga yetadi — status
+        // bar/notch ostida X tugma qolib ketmasligi uchun TOP ham xavfsiz
+        // maydon hisoblanadi. Bottom-sheet paytida (showModalBottomSheet,
+        // useSafeArea: false — standart) MediaQuery.removePadding orqali
+        // top padding OLIB TASHLANARDI, shu sabab bu SafeArea avval NO-OP
+        // edi (screenshotda X status-bar ustida ko'ringan sabab); endi
+        // oddiy sahifa bo'lgani uchun MediaQuery.padding.top HAQIQIY
+        // qiymatini oladi va bu SafeArea to'g'ri ishlaydi.
+        top: true,
+        child: Stack(
+          // Ogohlantirish banneri (pastda) shu Stack orqali kontent ustiga
+          // qo'yiladi — ENDI SafeArea ICHIDA (avval SafeArea'dan TASHQARIDA,
+          // hardcoded top:56 bilan edi — bu sarlavha 100%ga chiqarilgach
+          // status-bar balandligini hisobga olmay qolib ketgan, potentsial
+          // ustma-ust tushish xatosi edi). SafeArea ichida bo'lgani uchun
+          // banner'ning top offseti endi qurilmadan qurilmaga statusbar
+          // farqidan MUSTAQIL — faqat header balandligiga bog'liq.
+          clipBehavior: Clip.none,
           children: [
-            // Tortish tutqichi + yopish tugmasi.
-            // MUHIM: Stack o'lchamsiz qoldirilsa, faqat pozitsiyalanmagan
-            // farzandiga (tortish tutqichi, ~14px balandlik) qarab
-            // kichrayib qoladi — natijada Positioned yopish tugmasi
-            // Stack chegarasidan tashqarida qolib, Clip.hardEdge tufayli
-            // deyarli butunlay kesilib ko'rinmay qoladi (ham balandlikda,
-            // ham eni Stack kengligiga bog'liq bo'lgani uchun gorizontal
-            // joylashuvda ham). SizedBox bilan aniq o'lcham berish shart.
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Container(width: 36, height: 4,
-                        decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
-                  ),
-                  Positioned(
-                    right: 12, top: 8,
-                    child: CloseCircleButton(
-                      bg: tabBg, iconColor: textSecondary,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                  ),
-                ],
+            Column(
+          children: [
+            // Tortish tutqichi OLIB TASHLANDI — endi drag-to-dismiss yo'q
+            // (oddiy sahifa, faqat X tugma/tizim "orqaga" tugmasi bilan
+            // yopiladi), shuning uchun tutqich endi hech narsani
+            // anglatmas edi. X tugma o'zi kichik header qatorida, o'ng
+            // tomonda — barmoq bilan qulay bosiladigan joyda.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: CloseCircleButton(
+                  bg: tabBg, iconColor: textSecondary,
+                  onTap: () => Navigator.pop(context),
+                ),
               ),
             ),
 
@@ -1147,46 +1158,48 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
               ),
             ),
           ],
-        ),
-      ),
-          ),
-          // Modal tepasidan chiqadigan ogohlantirish banneri — Positioned
-          // orqali kontent ustiga (overlay) qo'yiladi, shu bilan pastdagi
-          // Column/ScrollView o'lchami o'zgarmaydi (layout sakramaydi).
-          // Yopish tugmasi (CloseCircleButton) bilan to'qnashmasligi uchun
-          // sarlavha qatoridan (48px) pastroqda joylashgan.
-          Positioned(
-            top: 56, left: 16, right: 16,
-            child: IgnorePointer(
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                offset: _topWarning != null ? Offset.zero : const Offset(0, -0.3),
-                child: AnimatedOpacity(
+            ),
+            // Modal tepasidan chiqadigan ogohlantirish banneri — Stack
+            // orqali kontent ustiga (overlay) qo'yiladi, shu bilan pastdagi
+            // Column/ScrollView o'lchami o'zgarmaydi (layout sakramaydi).
+            // Endi SafeArea ICHIDA joylashgan Stack'ning ikkinchi farzandi —
+            // shu sabab top offseti (48) faqat header balandligiga bog'liq,
+            // qurilma status-bar balandligidan MUSTAQIL (SafeArea allaqachon
+            // shuni hisobga olgan).
+            Positioned(
+              top: 48, left: 16, right: 16,
+              child: IgnorePointer(
+                child: AnimatedSlide(
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeOutCubic,
-                  opacity: _topWarning != null ? 1 : 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: _topWarningColor,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.error_outline, color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(_lastTopWarningText,
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  offset: _topWarning != null ? Offset.zero : const Offset(0, -0.3),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    opacity: _topWarning != null ? 1 : 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _topWarningColor,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
                       ),
-                    ]),
+                      child: Row(children: [
+                        const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(_lastTopWarningText,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ]),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
       ),
     );
   }
@@ -1397,47 +1410,57 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
       // bilan bir xil asos).
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: FractionallySizedBox(
-        heightFactor: 0.9,
+        // 2-band: order-form sahifasi bilan bir xil 100% balandlik.
+        heightFactor: 1.0,
+        // DIQQAT: bu yerda o'zining SafeArea(top:true)si YO'Q — chaqiruvchi
+        // tarafda (_openSearchModal()) showModalBottomSheet'ga
+        // `useSafeArea: true` uzatilgan, Flutter shu orqali o'zi
+        // SafeArea(bottom:false) bilan o'raydi (top/left/right). Avval
+        // shu yerda QO'LDA SafeArea(top:true) bo'lgan, lekin
+        // showModalBottomSheet standart holatda (useSafeArea:false)
+        // MediaQuery.removePadding(removeTop:true) qo'llagani sabab u
+        // NO-OP bo'lib qolgan edi (5-band skrinshotidagi X status-bar
+        // ustida ko'ringan asl sabab).
         child: Container(
           decoration: BoxDecoration(
             color: surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: SafeArea(
-            top: false,
-            child: Column(
+          child: Column(
               children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Container(width: 36, height: 4,
-                            decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
-                      ),
-                      Positioned(
-                        right: 12, top: 8,
-                        child: CloseCircleButton(
-                          bg: tabBg, iconColor: textSecondary,
-                          onTap: () => Navigator.pop(context),
+                // 5-band: tortish tutqichi (drag-to-dismiss hali ham
+                // ishlaydi — enableDrag: true) + sarlavha + X tugma —
+                // sarlavha va X ENDI BIR QATORDA (avval X alohida yuqorida,
+                // sarlavha undan pastda edi). _TruckPickerSheet/
+                // _WeightPickerSheet'dagi bilan bir xil, loyihada
+                // allaqachon o'rnashgan naqsh. Faqat shu header bloki
+                // o'zining gorizontal padding'iga ega — pastdagi qidiruv
+                // qutisi/natijalar ro'yxati o'zining mavjud padding'ini
+                // saqlab qoladi (Container darajasida umumiy padding
+                // qo'shilsa, ular ikki marta chekinib qolar edi).
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                  child: Column(children: [
+                    Center(
+                      child: Container(width: 36, height: 4,
+                          decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(children: [
+                      Icon(widget.isFrom ? Icons.local_shipping : Icons.location_on, size: 16,
+                          color: widget.isFrom ? AppTheme.primaryColor : AppTheme.errorColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Row(children: [
-                    Icon(widget.isFrom ? Icons.local_shipping : Icons.location_on, size: 16,
-                        color: widget.isFrom ? AppTheme.primaryColor : AppTheme.errorColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary),
-                    ),
+                      CloseCircleButton(
+                        bg: tabBg, iconColor: textSecondary,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                    ]),
                   ]),
                 ),
                 Padding(
@@ -1569,7 +1592,6 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
             ),
           ),
         ),
-      ),
     );
   }
 

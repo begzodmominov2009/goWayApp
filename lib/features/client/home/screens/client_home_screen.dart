@@ -397,6 +397,17 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     );
   }
 
+  // Order formasi endi bottom-sheet EMAS, OPAQUE to'liq sahifa
+  // (showOrderFormModal -> Navigator.push + orderFormPageRoute,
+  // app_router.dart) — shuning uchun xaritani qo'lda "yashirish/qaytarish"
+  // SHART EMAS: kirish animatsiyasi tugagach Flutter o'zi pastdagi Home'ni
+  // (jumladan native YandexMap'ni) UMUMAN chizmaydi/composite qilmaydi,
+  // widget esa daraxtda tirik qoladi — sahifa yopilganda xarita qayta
+  // yuklanmaydi/miltillamaydi. _mapFreezeDepth/freezeRouteObserver
+  // (pastda, _onMapFreezePushNext/_onMapFreezePopNext) bunga tegishli
+  // EMAS — u faqat ma'lumot yangilanishini (taymerlar) muzlatadi va
+  // o'zgarishsiz qoladi (bu PageRoute HAM ModalRoute'ning bir turi,
+  // shuning uchun RouteObserver<ModalRoute<void>> uni ilgarigidek ko'radi).
   Future<void> _startOrderFlow() async {
     final result = await showOrderFormModal(
       context,
@@ -576,6 +587,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
+          // YandexMap doim widget daraxtida qoladi — order-form endi OPAQUE
+          // to'liq sahifa (bottom-sheet emas), shu sabab Flutter kirish
+          // animatsiyasi tugagach pastdagi Home'ni (shu jumladan bu xaritani)
+          // o'zi chizmay qo'yadi/composite qilmaydi; qo'lda olib
+          // tashlash/qayta tiklash orqali native view'ni qayta yaratish
+          // (va shu bilan "qayta yuklanib ko'rinish" xavfi) shart emas.
           Positioned.fill(
             child: YandexMap(
               nightModeEnabled: isDark,

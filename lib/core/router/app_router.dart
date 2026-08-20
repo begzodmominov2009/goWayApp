@@ -173,6 +173,35 @@ Route<T> slideTransitionRoute<T>(Widget page) {
   );
 }
 
+// Buyurtma formasi (order_form_modal.dart) uchun — avval showModalBottomSheet
+// bilan ochilardi, endi OPAQUE to'liq sahifa (Navigator.push). SABAB: YandexMap
+// native platform view; PopupRoute.opaque HAR DOIM false, shu sabab
+// showModalBottomSheet ustida ham Flutter pastdagi Home'ni (xaritani) HAR
+// FRAME'DA composite qilishda davom etardi. Oddiy PageRoute esa opaque=true —
+// kirish animatsiyasi tugagach, Flutter pastdagi marshrutni UMUMAN
+// chizmaydi/composite qilmaydi, xarita esa widget daraxtida tirik qoladi
+// (qo'lda olib tashlash/qayta yaratish SHART EMAS, shu bilan yopilganda
+// "qayta yuklanib ko'rinish" muammosi HAM yo'qoladi).
+//
+// Pastdan-yuqoriga siljish + davomiylik/egri chiziq — order_form_modal.dart
+// dagi _kSheetAnimationStyle (350ms kirish / 320ms chiqish) va Flutter'ning
+// standart bottom-sheet egri chizig'i (material/curves.dart: decelerateEasing,
+// showModalBottomSheet ichida ham AYNAN shu ishlatiladi) bilan AYNAN bir xil —
+// foydalanuvchi eski bottom-sheet bilan yangi sahifa orasidagi farqni
+// sezmasligi uchun.
+Route<T> orderFormPageRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (context, animation, secondaryAnimation) => page,
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 320),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final tween = Tween(begin: const Offset(0.0, 1.0), end: Offset.zero)
+          .chain(CurveTween(curve: decelerateEasing));
+      return SlideTransition(position: animation.drive(tween), child: child);
+    },
+  );
+}
+
 // Splash va Onboarding uchun — bular boshlang'ich ekranlar, fade
 // (yumshoq paydo bo'lish) animatsiyasi ko'proq mos keladi
 CustomTransitionPage _fadePage(Widget child, GoRouterState state) {

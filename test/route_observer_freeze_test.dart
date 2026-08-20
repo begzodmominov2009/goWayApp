@@ -129,8 +129,18 @@ void main() {
   );
 
   testWidgets(
-    'nested modal-on-modal (order form -> truck picker) does not double-notify or unfreeze early',
+    'nested modal-on-page (order form sahifasi -> truck picker) does not double-notify or unfreeze early',
     (tester) async {
+      // DIQQAT: order-form endi showModalBottomSheet EMAS, OPAQUE
+      // Navigator.push + PageRouteBuilder sahifa (order_form_modal.dart:
+      // showOrderFormModal(), app_router.dart: orderFormPageRoute()) —
+      // shu sabab TASHQI qatlam shu yerda ham xuddi shunday, oddiy
+      // Navigator.push(MaterialPageRoute) bilan simulyatsiya qilinadi.
+      // freezeRouteObserver bunga PARVOSIZ bo'lishi kerak: u
+      // RouteObserver<ModalRoute<void>>, PageRoute HAM ModalRoute'ning bir
+      // turi (PageRoute<T> extends ModalRoute<T>), shuning uchun push/pop
+      // xabarnomalari bottom-sheet paytidagi bilan AYNAN bir xil ishlashi
+      // kerak — bu test aynan shuni isbotlaydi.
       final key = GlobalKey<_RecordingPageState>();
       await tester.pumpWidget(MaterialApp(
         navigatorObservers: [routeObserver, freezeRouteObserver],
@@ -140,20 +150,19 @@ void main() {
 
       final homeCtx = key.currentContext!;
 
-      // Tashqi modal — order_form_modal.dart dagi showOrderFormModal()ga o'xshab.
-      late BuildContext outerModalCtx;
-      showModalBottomSheet<void>(
-        context: homeCtx,
+      // Tashqi qatlam — order-form sahifasi (opaque PageRoute).
+      late BuildContext outerPageCtx;
+      Navigator.of(homeCtx).push(MaterialPageRoute<void>(
         builder: (innerCtx) {
-          outerModalCtx = innerCtx;
+          outerPageCtx = innerCtx;
           return const SizedBox(height: 80);
         },
-      );
+      ));
       await tester.pumpAndSettle();
       expect(key.currentState!.freezePushNext, 1);
 
-      // Ichki modal — _TruckPickerSheet kabi, TASHQI modal contextidan ochiladi.
-      showModalBottomSheet<void>(context: outerModalCtx, builder: (_) => const SizedBox(height: 40));
+      // Ichki modal — _TruckPickerSheet kabi, TASHQI sahifa contextidan ochiladi.
+      showModalBottomSheet<void>(context: outerPageCtx, builder: (_) => const SizedBox(height: 40));
       await tester.pumpAndSettle();
 
       expect(
@@ -163,8 +172,8 @@ void main() {
             '(RouteObserver faqat DARHOL ustidagi/ostidagi juftlikni bog\'laydi)',
       );
 
-      // Ichki modalni yopamiz — tashqi modal hali ekranda.
-      Navigator.of(outerModalCtx).pop();
+      // Ichki modalni yopamiz — tashqi sahifa hali ekranda.
+      Navigator.of(outerPageCtx).pop();
       await tester.pumpAndSettle();
 
       expect(
@@ -173,7 +182,7 @@ void main() {
         reason: 'ichki modal yopilishi Home ni erta tiklab yubormasligi kerak',
       );
 
-      // Endi tashqi modalni ham yopamiz — shundagina Home tiklanadi.
+      // Endi tashqi sahifani ham yopamiz — shundagina Home tiklanadi.
       Navigator.of(homeCtx).pop();
       await tester.pumpAndSettle();
 
