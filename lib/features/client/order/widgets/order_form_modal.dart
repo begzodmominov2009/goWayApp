@@ -1656,12 +1656,18 @@ class _TruckThumbnail extends StatelessWidget {
       child: Icon(Icons.local_shipping, size: size * 0.55, color: iconColor),
     );
     if (imageUrl == null || imageUrl!.isEmpty) return placeholder;
+    // cacheWidth — dekodlashni ko'rinadigan o'lchamga cheklaydi (faqat width;
+    // height proporsional hisoblanadi, aks holda kvadrat bo'lmagan rasm
+    // cho'ziladi). Bo'lmasa, backenddagi asl o'lchamdagi rasm har safar
+    // ro'yxatga kirganda to'liq dekodlanib, scroll'ni qotirar edi.
+    final cacheW = (size * MediaQuery.of(context).devicePixelRatio).round();
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Image.network(
         imageUrl!,
         width: size, height: size,
         fit: BoxFit.contain,
+        cacheWidth: cacheW,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );
