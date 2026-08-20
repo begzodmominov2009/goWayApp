@@ -7,6 +7,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -136,14 +137,12 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
     final locale = ref.read(localeProvider).languageCode;
     final result = await Navigator.push<Place>(
       context,
-      MaterialPageRoute(
-        builder: (ctx) => MapAddressPicker(
-          initialLat: isFrom ? widget.fromLat : (_toPlace?.lat ?? widget.fromLat),
-          initialLng: isFrom ? widget.fromLng : (_toPlace?.lng ?? widget.fromLng),
-          title: isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
-          isFrom: isFrom,
-        ),
-      ),
+      slideTransitionRoute(MapAddressPicker(
+        initialLat: isFrom ? widget.fromLat : (_toPlace?.lat ?? widget.fromLat),
+        initialLng: isFrom ? widget.fromLng : (_toPlace?.lng ?? widget.fromLng),
+        title: isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
+        isFrom: isFrom,
+      )),
     );
     if (result == null) return;
     setState(() {

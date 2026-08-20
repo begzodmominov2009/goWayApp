@@ -15,6 +15,7 @@ import '../../../../core/utils/address_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/driver_avatar.dart';
+import '../../../../shared/widgets/circle_icon_button.dart';
 import '../../../../core/providers/active_order_provider.dart';
 import '../widgets/client_menu_sheet.dart';
 import '../../order/widgets/order_form_modal.dart';
@@ -743,7 +744,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
                 const SizedBox(height: 10),
                 GestureDetector(
                   onTap: _toggleTilt,
-                  child: _CircleBtn(
+                  child: CircleIconButton(
                     icon: Icons.view_in_ar_outlined,
                     surface: _tiltOn ? AppTheme.primaryColor : surface,
                     textColor: _tiltOn ? Colors.white : textPrimary,
@@ -760,13 +761,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
               children: [
                 GestureDetector(
                   onTap: _locateMe,
-                  child: _CircleBtn(icon: Icons.my_location, surface: AppTheme.primaryColor, textColor: Colors.white),
+                  child: CircleIconButton(icon: Icons.my_location, surface: AppTheme.primaryColor, textColor: Colors.white),
                 ),
                 if (showDestinationBtn) ...[
                   const SizedBox(height: 10),
                   GestureDetector(
                     onTap: _goToDestination,
-                    child: _CircleBtn(icon: Icons.flag, surface: AppTheme.primaryColor, textColor: Colors.white),
+                    child: CircleIconButton(icon: Icons.flag, surface: AppTheme.primaryColor, textColor: Colors.white),
                   ),
                 ],
               ],
@@ -901,26 +902,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       _syncActiveOrderProvider();
       _rebuildMapObjects();
     }
-  }
-}
-
-class _CircleBtn extends StatelessWidget {
-  final IconData icon;
-  final Color surface;
-  final Color textColor;
-  const _CircleBtn({required this.icon, required this.surface, required this.textColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 46, height: 46,
-      decoration: BoxDecoration(
-        color: surface,
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
-      ),
-      child: Icon(icon, color: textColor, size: 23),
-    );
   }
 }
 

@@ -136,6 +136,43 @@ CustomTransitionPage _slidePage(Widget child, GoRouterState state) {
   );
 }
 
+// _slidePage bilan AYNAN BIR XIL "o'ngdan chapga siljish + parallax"
+// o'tish animatsiyasi — lekin GoRoute'ga TEGISHLI BO'LMAGAN, oddiy
+// Navigator.push() bilan ochiladigan ekranlar uchun (masalan
+// MapAddressPicker — xaritadan manzil tanlash, buyurtma formasi/manzil
+// tanlash ekranlaridan Navigator.push orqali ochiladi, GoRoute emas).
+// Shu bilan GoRouter marshrutlar ro'yxatiga yangi yo'l qo'shmasdan,
+// mavjud vizual naqshni qayta ishlatish mumkin — kirish HAM, orqaga
+// qaytish (pop) HAM silliq bo'ladi (PageRouteBuilder buni avtomatik
+// o'zi reverseTransitionDuration bilan boshqaradi).
+Route<T> slideTransitionRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (context, animation, secondaryAnimation) => page,
+    transitionDuration: const Duration(milliseconds: 300),
+    reverseTransitionDuration: const Duration(milliseconds: 250),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      const begin = Offset(1.0, 0.0);
+      const end = Offset.zero;
+      const curve = Curves.easeOutCubic;
+
+      final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+      final offsetAnimation = animation.drive(tween);
+
+      final secondaryTween = Tween(begin: Offset.zero, end: const Offset(-0.3, 0.0))
+          .chain(CurveTween(curve: curve));
+      final secondaryOffsetAnimation = secondaryAnimation.drive(secondaryTween);
+
+      return SlideTransition(
+        position: offsetAnimation,
+        child: SlideTransition(
+          position: secondaryOffsetAnimation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 // Splash va Onboarding uchun — bular boshlang'ich ekranlar, fade
 // (yumshoq paydo bo'lish) animatsiyasi ko'proq mos keladi
 CustomTransitionPage _fadePage(Widget child, GoRouterState state) {

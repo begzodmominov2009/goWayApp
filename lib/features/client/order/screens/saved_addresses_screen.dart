@@ -8,6 +8,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
 import '../../../../shared/widgets/place.dart';
 import '../../../../shared/widgets/map_address_picker.dart';
@@ -345,14 +346,12 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
     final locale = ref.read(localeProvider).languageCode;
     final result = await Navigator.push<Place>(
       context,
-      MaterialPageRoute(
-        builder: (ctx) => MapAddressPicker(
-          initialLat: _lat ?? 41.2995,
-          initialLng: _lng ?? 69.2401,
-          title: AppStrings.get('choose_on_map', locale),
-          isFrom: true,
-        ),
-      ),
+      slideTransitionRoute(MapAddressPicker(
+        initialLat: _lat ?? 41.2995,
+        initialLng: _lng ?? 69.2401,
+        title: AppStrings.get('choose_on_map', locale),
+        isFrom: true,
+      )),
     );
     if (result == null || !mounted) return;
     setState(() {

@@ -9,6 +9,7 @@ import '../../../../core/network/client_repository.dart';
 import '../../../../core/network/geo_repository.dart';
 import '../../../../core/network/geocode_repository.dart';
 import '../../../../core/providers/client_cache_providers.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/animated_clear_button.dart';
 import '../../../../shared/widgets/app_loading_indicator.dart';
@@ -375,14 +376,12 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
     final locale = ref.read(localeProvider).languageCode;
     final result = await Navigator.push<Place>(
       context,
-      MaterialPageRoute(
-        builder: (ctx) => MapAddressPicker(
-          initialLat: isFrom ? widget.fromLat : (_toPlace?.lat ?? widget.fromLat),
-          initialLng: isFrom ? widget.fromLng : (_toPlace?.lng ?? widget.fromLng),
-          title: isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
-          isFrom: isFrom,
-        ),
-      ),
+      slideTransitionRoute(MapAddressPicker(
+        initialLat: isFrom ? widget.fromLat : (_toPlace?.lat ?? widget.fromLat),
+        initialLng: isFrom ? widget.fromLng : (_toPlace?.lng ?? widget.fromLng),
+        title: isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
+        isFrom: isFrom,
+      )),
     );
     if (result == null) return;
     _setPlace(result, isFrom: isFrom);
@@ -1309,14 +1308,12 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
     final locale = ref.read(localeProvider).languageCode;
     final result = await Navigator.push<Place>(
       context,
-      MaterialPageRoute(
-        builder: (ctx) => MapAddressPicker(
-          initialLat: widget.biasLat,
-          initialLng: widget.biasLng,
-          title: widget.isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
-          isFrom: widget.isFrom,
-        ),
-      ),
+      slideTransitionRoute(MapAddressPicker(
+        initialLat: widget.biasLat,
+        initialLng: widget.biasLng,
+        title: widget.isFrom ? AppStrings.get('from_question', locale) : AppStrings.get('to_question', locale),
+        isFrom: widget.isFrom,
+      )),
     );
     if (result == null || !mounted) return;
     Navigator.pop(context, result);
