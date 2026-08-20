@@ -219,7 +219,7 @@ class _MapAddressPickerState extends ConsumerState<MapAddressPicker> {
             child: Container(
               color: surface.withOpacity(0.97),
               padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 6,
+                top: MediaQuery.paddingOf(context).top + 6,
                 left: 4, right: 12, bottom: 10,
               ),
               child: Column(
@@ -274,7 +274,7 @@ class _MapAddressPickerState extends ConsumerState<MapAddressPicker> {
 
           if (showResults)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 100,
+              top: MediaQuery.paddingOf(context).top + 100,
               left: 0, right: 0, bottom: 0,
               child: Container(
                 color: surface,
@@ -319,7 +319,7 @@ class _MapAddressPickerState extends ConsumerState<MapAddressPicker> {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
                 ),
-                padding: EdgeInsets.fromLTRB(16, 14, 16, MediaQuery.of(context).padding.bottom + 16),
+                padding: EdgeInsets.fromLTRB(16, 14, 16, MediaQuery.paddingOf(context).bottom + 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,

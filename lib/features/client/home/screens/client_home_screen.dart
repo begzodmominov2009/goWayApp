@@ -23,10 +23,39 @@ import '../../order/screens/order_progress_screen.dart';
 const double _kMinZoom = 3.0;
 const double _kMaxZoom = 20.0;
 
+// Haydovchi kuzatuvi (tracking) davom etishi kerak bo'lgan statuslar —
+// shu ro'yxatdan tashqarida (DELIVERED/COMPLETED/CANCELLED) taymer qayta
+// ishga tushirilmasligi kerak.
+const List<String> _kTrackedOrderStatuses = ['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'];
+
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
   reverseDuration: const Duration(milliseconds: 320),
 );
+
+// Home ustidagi "xaritani muzlatish" uchun alohida RouteAware yordamchi.
+// SABAB: mavjud `routeObserver` (RouteObserver<PageRoute>, _showTopPanel
+// uchun ishlatiladi) faqat PageRoute<->PageRoute o'tishlarini ko'radi —
+// showModalBottomSheet (order-form modali, mashina/vaqt/manzil pickerlari,
+// menyu) ModalBottomSheetRoute (PopupRoute, ya'ni PageRoute EMAS) yaratadi,
+// shuning uchun ular umuman ko'rinmaydi (route_observer_freeze_test.dart
+// da haqiqiy loyiha observer'i bilan tasdiqlangan). Bitta klass ikkita
+// RouteObserver'ga bir xil RouteAware metodlar bilan obuna bo'la olmaydi
+// (didPushNext/didPopNext bitta juftlik), shu sabab freeze uchun mustaqil,
+// kichik RouteAware obyekt kerak — u alohida `freezeRouteObserver`
+// (RouteObserver<ModalRoute<void>>, app_router.dart) ga obuna bo'ladi va
+// `_showTopPanel`ga UMUMAN tegmaydi.
+class _FreezeRouteAware with RouteAware {
+  _FreezeRouteAware({required this.onPushNext, required this.onPopNext});
+  final VoidCallback onPushNext;
+  final VoidCallback onPopNext;
+
+  @override
+  void didPushNext() => onPushNext();
+
+  @override
+  void didPopNext() => onPopNext();
+}
 
 class ClientHomeScreen extends ConsumerStatefulWidget {
   const ClientHomeScreen({super.key});
@@ -66,6 +95,32 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   int _unreadNotifCount = 0;
   Timer? _notifCountTimer;
 
+  // Home ustida hozir nechta ModalRoute ochiq turibdi (order-form modali,
+  // uning ICHIDAGI mashina/vaqt/manzil pickerlari, menyu va h.k.) — 0dan
+  // katta bo'lsa xarita "muzlaydi". Bool emas hisoblagich: order-form
+  // modali ichidan yana bir bottom-sheet ochilsa (masalan mashina tanlash),
+  // RouteObserver bu ikkinchi push haqida Home'ga UMUMAN xabar bermaydi —
+  // chunki u faqat DARHOL ustidagi/ostidagi juftlikni bog'laydi (yangi
+  // push'ning "previousRoute"si order-form modali bo'ladi, Home emas).
+  // route_observer_freeze_test.dart'dagi "nested modal-on-modal" testi
+  // buni haqiqiy observer bilan tasdiqlaydi — shu holatda hisoblagich ham
+  // 0->1->0 dan oshmaydi. Baribir hisoblagich sifatida saqlanadi — kelgusida
+  // navigatsiya sxemasi o'zgarsa ham (masalan alohida Navigator qo'shilsa)
+  // freeze erta ochilib ketmasligi uchun.
+  int _mapFreezeDepth = 0;
+  bool get _mapFrozen => _mapFreezeDepth > 0;
+
+  late final _FreezeRouteAware _freezeRouteAware = _FreezeRouteAware(
+    onPushNext: _onMapFreezePushNext,
+    onPopNext: _onMapFreezePopNext,
+  );
+
+  // Muzlatilgan paytda _refreshActiveOrder() javobi kelib qolsa (taymer
+  // to'xtatilgandan keyin ham, so'rov push paytida allaqachon jo'natilgan
+  // bo'lishi mumkin), natija shu yerga saqlanadi va tashlab yuborilmaydi —
+  // freeze ochilganda bir marta qo'llanadi.
+  Map<String, dynamic>? _pendingOrderSnapshot;
+
   @override
   void initState() {
     super.initState();
@@ -79,7 +134,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   Future<void> _loadUnreadNotifCount() async {
     try {
       final count = await ref.read(notificationRepositoryProvider).getUnreadCount();
-      if (mounted) setState(() => _unreadNotifCount = count);
+      if (!mounted || _mapFrozen) return;
+      setState(() => _unreadNotifCount = count);
     } catch (_) {}
   }
 
@@ -90,17 +146,24 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     if (newDark != _isDark) {
       _isDark = newDark;
     }
+    // Ikkita MUSTAQIL obuna, ikkita observer'ga: `routeObserver`
+    // (RouteObserver<PageRoute>) faqat _showTopPanel uchun — xatti-harakati
+    // o'ZGARMAYDI. `freezeRouteObserver` (RouteObserver<ModalRoute<void>>)
+    // esa faqat xarita muzlatish uchun, alohida `_freezeRouteAware` orqali.
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+    freezeRouteObserver.subscribe(_freezeRouteAware, ModalRoute.of(context)!);
   }
 
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    freezeRouteObserver.unsubscribe(_freezeRouteAware);
     _trackingTimer?.cancel();
     _notifCountTimer?.cancel();
     super.dispose();
   }
 
+  // O'zgarmadi: faqat _showTopPanel'ni boshqaradi, xuddi avvalgidek.
   @override
   void didPushNext() {
     if (mounted) setState(() => _showTopPanel = false);
@@ -110,6 +173,44 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   void didPopNext() {
     if (mounted) setState(() => _showTopPanel = true);
     _loadUnreadNotifCount();
+  }
+
+  void _onMapFreezePushNext() {
+    _mapFreezeDepth++;
+    if (_mapFreezeDepth > 1) return; // ichki modal — freeze allaqachon yoqilgan
+    _trackingTimer?.cancel();
+    _trackingTimer = null;
+    _notifCountTimer?.cancel();
+    _notifCountTimer = null;
+  }
+
+  void _onMapFreezePopNext() {
+    if (_mapFreezeDepth == 0) return; // ehtiyot chorasi — bo'lmasligi kerak
+    _mapFreezeDepth--;
+    if (_mapFreezeDepth > 0) return; // hali boshqa modal ustida turibdi
+
+    _notifCountTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadUnreadNotifCount());
+    _loadUnreadNotifCount();
+
+    // Muzlatilgan paytda kelib, saqlab qo'yilgan oxirgi buyurtma holati
+    // bo'lsa — shu yerda BIR MARTA qo'llanadi (yo'qolib ketmasin uchun).
+    // Bo'lmasa, aktiv buyurtma bor bo'lsa, xaritani yangi holat bilan
+    // bir marta yangilash uchun yangi so'rov yuboriladi.
+    final pending = _pendingOrderSnapshot;
+    _pendingOrderSnapshot = null;
+    if (pending != null) {
+      _applyOrderSnapshot(pending);
+    } else if (_activeOrder != null) {
+      _refreshActiveOrder();
+    }
+    // Faqat hali ham "kuzatuvda" bo'lgan status uchun taymerni qayta
+    // ishga tushiramiz — muzlatilgan paytda buyurtma DELIVERED/CANCELLED
+    // bo'lib qolgan bo'lsa (yuqoridagi sinxron setState buni allaqachon
+    // aks ettiradi), keraksiz pollingni qayta boshlamaslik uchun.
+    final status = _activeOrder?['status'] as String?;
+    if (status != null && _kTrackedOrderStatuses.contains(status)) {
+      _trackingTimer = Timer.periodic(const Duration(seconds: 6), (_) => _refreshActiveOrder());
+    }
   }
 
   Future<void> _loadIcons() async {
@@ -133,6 +234,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   }
 
   void _rebuildMapObjects() {
+    if (_mapFrozen) return;
     final objects = <MapObject>[];
 
     if (_myLocationIcon != null && _activeOrder == null) {
@@ -341,6 +443,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
   bool _isPickupPhase(String status) => status == 'ACCEPTED' || status == 'DRIVER_ARRIVING';
 
   Future<void> _updateDriverTracking() async {
+    if (_mapFrozen) return;
     if (_activeOrder == null) return;
     final driver = _activeOrder!['driver'] as Map<String, dynamic>?;
     if (driver == null) return;
@@ -407,7 +510,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       if (orders.isEmpty || !mounted) return;
       final latest = orders.first;
       final status = latest['status'] as String;
-      if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
+      if (_kTrackedOrderStatuses.contains(status)) {
         setState(() => _activeOrder = latest);
         _syncActiveOrderProvider();
         _startTrackingLoop();
@@ -420,23 +523,34 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
       final orders = await ref.read(clientRepositoryProvider).getOrders();
       if (orders.isEmpty || !mounted) return;
       final latest = orders.first;
-      final status = latest['status'] as String;
-
-      if (['ACCEPTED', 'DRIVER_ARRIVING', 'LOADING', 'IN_TRANSIT'].contains(status)) {
-        setState(() => _activeOrder = latest);
-        _syncActiveOrderProvider();
-        await _updateDriverTracking();
-      } else if (status == 'DELIVERED' || status == 'COMPLETED') {
-        _trackingTimer?.cancel();
-        setState(() => _activeOrder = latest);
-        _syncActiveOrderProvider();
-      } else if (status == 'CANCELLED') {
-        _trackingTimer?.cancel();
-        setState(() => _activeOrder = null);
-        _syncActiveOrderProvider();
-        _rebuildMapObjects();
+      // Taymer to'xtatilgan bo'lsa-da, so'rov muzlash boshlanishidan oldin
+      // allaqachon jo'natilgan bo'lishi mumkin — javob yo'qolib ketmasin
+      // uchun saqlanadi, didPopNext() qayta ochilganda bir marta qo'llaydi.
+      if (_mapFrozen) {
+        _pendingOrderSnapshot = latest;
+        return;
       }
+      await _applyOrderSnapshot(latest);
     } catch (_) {}
+  }
+
+  Future<void> _applyOrderSnapshot(Map<String, dynamic> latest) async {
+    final status = latest['status'] as String;
+
+    if (_kTrackedOrderStatuses.contains(status)) {
+      setState(() => _activeOrder = latest);
+      _syncActiveOrderProvider();
+      await _updateDriverTracking();
+    } else if (status == 'DELIVERED' || status == 'COMPLETED') {
+      _trackingTimer?.cancel();
+      setState(() => _activeOrder = latest);
+      _syncActiveOrderProvider();
+    } else if (status == 'CANCELLED') {
+      _trackingTimer?.cancel();
+      setState(() => _activeOrder = null);
+      _syncActiveOrderProvider();
+      _rebuildMapObjects();
+    }
   }
 
   int get _zoomPercent =>
@@ -451,9 +565,14 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final showDestinationBtn = _activeOrder != null;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
+      // Home'da klaviatura talab qiladigan input yo'q; klaviatura
+      // ochilib-yopilganda Scaffold qayta o'lchanib, native xarita
+      // surface'i har kadrda qayta o'lchanmasin (order modali klaviatura
+      // paddingini o'zi — MediaQuery.viewInsetsOf orqali — boshqaradi).
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(
@@ -664,7 +783,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> with RouteA
               ),
               padding: EdgeInsets.only(
                 left: 16, right: 16, top: 12,
-                bottom: MediaQuery.of(context).padding.bottom + 12,
+                bottom: MediaQuery.paddingOf(context).bottom + 12,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

@@ -135,7 +135,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
                               decoration: BoxDecoration(
                                 gradient: isMine
                                     ? const LinearGradient(colors: [Color(0xFF1e3a8a), Color(0xFF3b82f6)])
@@ -164,7 +164,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Container(
             padding: EdgeInsets.only(
               left: 12, right: 12, top: 8,
-              bottom: MediaQuery.of(context).padding.bottom + 8,
+              bottom: MediaQuery.paddingOf(context).bottom + 8,
             ),
             decoration: BoxDecoration(
               color: surface,

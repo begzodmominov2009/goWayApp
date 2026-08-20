@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/geo_repository.dart';
+import '../../../../core/providers/driver_cache_providers.dart';
 
 final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
@@ -25,15 +26,13 @@ class RegionPickerPage extends ConsumerStatefulWidget {
 }
 
 class _RegionPickerPageState extends ConsumerState<RegionPickerPage> {
-  bool _loading = true;
-  List<GeoRegion> _regions = [];
   final _searchCtrl = TextEditingController();
   _ActiveFilter _filter = _ActiveFilter.all;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    ref.read(driverRegionsCacheProvider.notifier).refreshIfStale();
     _searchCtrl.addListener(() => setState(() {}));
   }
 
@@ -41,16 +40,6 @@ class _RegionPickerPageState extends ConsumerState<RegionPickerPage> {
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _load() async {
-    final list = await ref.read(geoRepositoryProvider).getAllRegions();
-    list.sort((a, b) => a.name.compareTo(b.name));
-    if (!mounted) return;
-    setState(() {
-      _regions = list;
-      _loading = false;
-    });
   }
 
   void _select(GeoRegion region) {
@@ -166,8 +155,13 @@ class _RegionPickerPageState extends ConsumerState<RegionPickerPage> {
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
 
+    final regionsAsync = ref.watch(driverRegionsCacheProvider);
+    final loading = regionsAsync.isLoading && !regionsAsync.hasValue;
+    final regions = [...regionsAsync.valueOrNull ?? const <GeoRegion>[]]
+      ..sort((a, b) => a.name.compareTo(b.name));
+
     final query = _searchCtrl.text.trim().toLowerCase();
-    final filtered = _regions.where((r) {
+    final filtered = regions.where((r) {
       if (_filter == _ActiveFilter.activeOnly && !r.isActive) return false;
       if (_filter == _ActiveFilter.inactiveOnly && r.isActive) return false;
       if (query.isNotEmpty && !r.name.toLowerCase().contains(query)) return false;
@@ -241,7 +235,7 @@ class _RegionPickerPageState extends ConsumerState<RegionPickerPage> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: _loading
+              child: loading
                   ? ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: 8,

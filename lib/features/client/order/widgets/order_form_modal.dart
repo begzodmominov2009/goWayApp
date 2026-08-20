@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/network/client_repository.dart';
@@ -23,6 +24,31 @@ final AnimationStyle _kSheetAnimationStyle = AnimationStyle(
   duration: const Duration(milliseconds: 350),
   reverseDuration: const Duration(milliseconds: 320),
 );
+
+// Forma bo'ylab BARCHA sarlavha->input oraliqlari va tanlash-input
+// (mashina/og'irlik/vaqt) o'lchamlari uchun YAGONA standart — turli
+// joylarda turlicha qiymatlar (masalan bir joyda 12px padding, boshqasida
+// 16px) bo'lib qolmasligi uchun.
+const double _kLabelGap = 6.0; // sarlavha -> pastidagi input orasidagi bo'shliq
+const double _kFieldGap = 16.0; // bir maydon guruhi -> keyingisi orasidagi bo'shliq
+const double _kFieldHeight = 50.0; // tanlash-inputlarining balandligi
+const double _kFieldPadding = 16.0; // tanlash-inputlarining ichki gorizontal padding
+const double _kFieldRadius = 14.0; // tanlash-inputlarining burchak radiusi
+
+// "?" yordam IconButton'lari uchun umumiy stil. SABAB: Material 3'da
+// IconButton'ga `padding: EdgeInsets.zero` + `constraints: BoxConstraints()`
+// berilsa ham, u platforma standart teginish maydoni (48x48,
+// MaterialTapTargetSize.padded) uchun KO'RINMAS qo'shimcha joy ajratishda
+// davom etadi — natijada sarlavha qatori balandligi matn balandligidan
+// (~17px) emas, 48px'dan kelib chiqadi, shu bilan "?" bor sarlavhalar
+// ("Mashina turini tanlang" va h.k.) va "?" siz sarlavhalar ("Yuk turi")
+// orasida katta ko'rinmas oraliq farqi paydo bo'ladi (vidjet testi bilan
+// o'lchab tasdiqlandi: 48px vs 17px, farq 31px). `tapTargetSize:
+// shrinkWrap` shu ko'rinmas paddingni olib tashlaydi; bosish maydoni esa
+// pastdagi `constraints: BoxConstraints(minWidth/minHeight: 32)` bilan
+// qulay saqlanadi (tuzatilgach o'lchov: 32px, farq atigi 15px).
+final ButtonStyle _kHelpIconButtonStyle =
+    IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap);
 
 /// Buyurtma yaratish formasi — manzil tanlash (SelectAddressScreen) va
 /// buyurtma tafsilotlari (OrderDetailsScreen) BITTA bottom-sheet modalga
@@ -129,6 +155,20 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
   double? _calculatedPrice;
   bool _priceLoading = false;
   Timer? _priceDebounce;
+
+  // build() ichida to'g'ridan-to'g'ri qurilsa (inline), asosiy modal HAR
+  // safar boshqa sababdan (mashina/og'irlik tanlash, narx yuklanishi va h.k.)
+  // qayta qurilganda ham bu ikkalasi YANGI instansiya sifatida qayta
+  // yaratilib, o'zlarining animatsiyali ichki daraxtini bekorga qayta
+  // quradi — o'lchov bilan tasdiqlandi (build sonlari orderModal bilan
+  // aynan bir xil sur'atda o'sgan). Maydon sifatida BIR MARTA yaratib,
+  // build() shu tayyor instansiyani qaytarib ishlatadi — Flutter
+  // Element.update() yangi widget ESKISI bilan IDENTIK bo'lsa, ichki
+  // qismni qayta qurmaydi.
+  late final Widget _cargoClearButton =
+      AnimatedClearButton(controller: _cargoTypeCtrl, focusNode: _cargoTypeFocus);
+  late final Widget _noteClearButton =
+      AnimatedClearButton(controller: _noteCtrl, focusNode: _noteFocus);
 
   List<Map<String, dynamic>> get _trucks =>
       ref.read(clientTrucksCacheProvider).valueOrNull ?? const [];
@@ -552,7 +592,12 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
     // ko'rinadigan joyga o'zi scroll qilish" xulq-atvori to'g'ri ishlaydi
     // (_AddressSearchModal'da ham xuddi shu naqsh ishlatilgan).
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      // MediaQuery.of(context) EMAS — to'liq MediaQueryData obyektiga
+      // bog'lanish shu widget'ni HAR QANDAY MediaQuery maydoni (masalan
+      // boshqa route ochilganda platformBrightness/textScaler) o'zgarganda
+      // qayta quradi. viewInsetsOf faqat aynan shu maydon o'zgarganda
+      // bog'liqlikni qo'zg'atadi.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -737,46 +782,50 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _routeLoading
-                              ? const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 10),
-                                    child: SizedBox(width: 20, height: 20, child: AppLoadingIndicator(strokeWidth: 2)),
-                                  ),
-                                )
-                              : (_currentDistKm != null
-                                  ? Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: tabBg,
-                                        borderRadius: BorderRadius.circular(12),
+                          // Manzillar hali kiritilmagan bo'lsa ham blok DOIM
+                          // ko'rinadi ("—" bilan) — shu bilan pastidagi
+                          // "Mashina turini tanlang" bo'limi manzil
+                          // kiritilganda/kiritilmaganda bir xil joyda turadi,
+                          // layout sakramaydi (avval bu blok butunlay
+                          // yashirin edi, manzil kiritilgach paydo bo'lardi).
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: tabBg,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
+                              const SizedBox(width: 7),
+                              _routeLoading
+                                  ? const SizedBox(width: 14, height: 14, child: AppLoadingIndicator(strokeWidth: 2))
+                                  : Text(
+                                      _currentDistKm != null ? '${_currentDistKm!.toStringAsFixed(1)} km' : '—',
+                                      style: TextStyle(
+                                        fontSize: 14, fontWeight: FontWeight.w800,
+                                        color: _currentDistKm != null ? AppTheme.primaryColor : textSecondary,
                                       ),
-                                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                        const Icon(Icons.route, size: 16, color: AppTheme.primaryColor),
-                                        const SizedBox(width: 7),
-                                        Text('${_currentDistKm!.toStringAsFixed(1)} km',
-                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryColor)),
-                                        if (_currentTimeMin != null) ...[
-                                          Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
-                                          Icon(Icons.access_time, size: 14, color: textSecondary),
-                                          const SizedBox(width: 5),
-                                          Text(
-                                            _currentTimeMin! >= 60
-                                                ? '${_currentTimeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${_currentTimeMin! % 60}${AppStrings.get('route_time_min', locale)}'
-                                                : '$_currentTimeMin ${AppStrings.get('route_time_min', locale)}',
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
-                                          ),
-                                        ],
-                                      ]),
-                                    )
-                                  : const SizedBox.shrink()),
-                          if (!_routeLoading && _currentDistKm != null) ...[
-                            const SizedBox(height: 6),
-                            Text(AppStrings.get('auto_calculated_hint', locale),
-                                style: TextStyle(fontSize: 11, color: textSecondary)),
-                            const SizedBox(height: 14),
-                          ],
+                                    ),
+                              Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 14, color: textSecondary.withOpacity(0.3)),
+                              Icon(Icons.access_time, size: 14, color: textSecondary),
+                              const SizedBox(width: 5),
+                              _routeLoading
+                                  ? const SizedBox(width: 14, height: 14, child: AppLoadingIndicator(strokeWidth: 2))
+                                  : Text(
+                                      _currentTimeMin != null
+                                          ? (_currentTimeMin! >= 60
+                                              ? '${_currentTimeMin! ~/ 60}${AppStrings.get('route_time_hour', locale)} ${_currentTimeMin! % 60}${AppStrings.get('route_time_min', locale)}'
+                                              : '$_currentTimeMin ${AppStrings.get('route_time_min', locale)}')
+                                          : '—',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary),
+                                    ),
+                            ]),
+                          ),
+                          const SizedBox(height: _kLabelGap),
+                          Text(AppStrings.get('auto_calculated_hint', locale),
+                              style: TextStyle(fontSize: 11, color: textSecondary)),
+                          const SizedBox(height: _kFieldGap),
 
                           Row(children: [
                             Text(AppStrings.get('select_vehicle', locale),
@@ -785,14 +834,15 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                             IconButton(
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              style: _kHelpIconButtonStyle,
                               onPressed: () => _showHelpSheet(
                                 title: AppStrings.get('select_vehicle', locale),
                                 sections: [_InfoSection(body: AppStrings.get('vehicle_help_full', locale))],
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: _kLabelGap),
 
                           trucksLoading
                               ? const Center(child: Padding(padding: EdgeInsets.all(20), child: AppLoadingIndicator()))
@@ -800,11 +850,11 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                                   onTap: _showTruckPicker,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 50,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    height: _kFieldHeight,
+                                    padding: const EdgeInsets.symmetric(horizontal: _kFieldPadding),
                                     decoration: BoxDecoration(
                                       color: bg,
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: BorderRadius.circular(_kFieldRadius),
                                       border: Border.all(color: border),
                                     ),
                                     child: Row(
@@ -835,7 +885,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                                     ),
                                   ),
                                 ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: _kFieldGap),
 
                           Row(children: [
                             Text(AppStrings.get('weight_tons', locale),
@@ -844,14 +894,15 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                             IconButton(
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              style: _kHelpIconButtonStyle,
                               onPressed: () => _showHelpSheet(
                                 title: AppStrings.get('weight_tons', locale),
                                 sections: [_InfoSection(body: AppStrings.get('weight_help_full', locale))],
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: _kLabelGap),
                           Opacity(
                             opacity: _selectedTruck == null ? 0.6 : 1.0,
                             child: GestureDetector(
@@ -867,11 +918,11 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               },
                               child: Container(
                                 width: double.infinity,
-                                height: 50,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                height: _kFieldHeight,
+                                padding: const EdgeInsets.symmetric(horizontal: _kFieldPadding),
                                 decoration: BoxDecoration(
                                   color: bg,
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(_kFieldRadius),
                                   border: Border.all(color: border),
                                 ),
                                 child: Row(
@@ -892,10 +943,10 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: _kFieldGap),
 
                           Text(AppStrings.get('cargo_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: _kLabelGap),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -908,10 +959,10 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                                   decoration: InputDecoration(hintText: AppStrings.get('cargo_type_hint', locale), hintStyle: TextStyle(color: textSecondary)),
                                 ),
                               ),
-                              AnimatedClearButton(controller: _cargoTypeCtrl, focusNode: _cargoTypeFocus),
+                              _cargoClearButton,
                             ],
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: _kFieldGap),
 
                           Row(children: [
                             Text(AppStrings.get('load_type_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
@@ -919,14 +970,15 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                             IconButton(
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              style: _kHelpIconButtonStyle,
                               onPressed: () => _showHelpSheet(
                                 title: AppStrings.get('load_type_label', locale),
                                 sections: [_InfoSection(body: AppStrings.get('load_type_help_full', locale))],
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: _kLabelGap),
                           Row(children: [
                             Expanded(
                               child: _TimeTab(
@@ -946,7 +998,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: _kFieldGap),
 
                           Row(children: [
                             Text(AppStrings.get('order_when_label', locale), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textSecondary)),
@@ -954,7 +1006,8 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                             IconButton(
                               icon: Icon(Icons.help_outline, size: 16, color: textSecondary),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              style: _kHelpIconButtonStyle,
                               onPressed: () => _showHelpSheet(
                                 title: AppStrings.get('order_when_label', locale),
                                 sections: [
@@ -965,7 +1018,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: _kLabelGap),
                           Row(children: [
                             Expanded(
                               child: _TimeTab(
@@ -995,16 +1048,16 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                             ),
                           ]),
                           if (_isScheduled) ...[
-                            const SizedBox(height: 14),
+                            const SizedBox(height: _kFieldGap),
                             GestureDetector(
                               onTap: _showTimePicker,
                               child: Container(
                                 width: double.infinity,
-                                height: 50,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                height: _kFieldHeight,
+                                padding: const EdgeInsets.symmetric(horizontal: _kFieldPadding),
                                 decoration: BoxDecoration(
                                   color: bg,
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(_kFieldRadius),
                                   border: Border.all(color: border),
                                 ),
                                 child: Row(
@@ -1025,7 +1078,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 12),
+                          const SizedBox(height: _kFieldGap),
 
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -1039,7 +1092,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
                                   decoration: InputDecoration(hintText: AppStrings.get('note_optional', locale), hintStyle: TextStyle(color: textSecondary)),
                                 ),
                               ),
-                              AnimatedClearButton(controller: _noteCtrl, focusNode: _noteFocus),
+                              _noteClearButton,
                             ],
                           ),
                           if (_priceLoading) ...[
@@ -1072,7 +1125,7 @@ class _OrderFormModalState extends ConsumerState<_OrderFormModal> {
             // tinglaymiz — shunda har harf kiritilganda FAQAT shu tugma
             // qayta quriladi, butun modal emas (ortiqcha rebuild yo'q).
             Container(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
+              padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.paddingOf(context).bottom + 16),
               decoration: BoxDecoration(
                 color: surface,
                 border: Border(top: BorderSide(color: border)),
@@ -1165,22 +1218,25 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
   Timer? _debounce;
   final Set<String> _savedPlaceKeys = {};
 
-  // Qidiruv tarixi (GET /address-history) — modal ochilganda bir marta
-  // yuklanadi, input bo'sh bo'lganda "Saqlangan manzillar" bilan birga
-  // ko'rsatiladi.
-  List<Map<String, dynamic>> _history = [];
+  // _OrderFormModalState dagi _cargoClearButton/_noteClearButton bilan bir
+  // xil sabab: bu modal locale/qidiruv holati kabi ko'p sabablar bilan
+  // tez-tez qayta quriladi (aynan shu — symptom #1/#2 sabablaridan biri edi),
+  // shuning uchun X tugmasini HAR safar yangi instansiya sifatida qurish
+  // uning ichki animatsiyali daraxtini bekorga qayta quraveradi. Bir marta
+  // yaratib, build() shu tayyor instansiyani qaytaradi.
+  late final Widget _searchClearButton = AnimatedClearButton(
+    controller: _ctrl,
+    focusNode: _focus,
+    onCleared: () => setState(() => _results = []),
+  );
 
   @override
   void initState() {
     super.initState();
-    // Klaviatura darhol (autofocus bilan) chiqsa, sheet hali sirg'alib
-    // kirayotgan animatsiya bilan to'qnashib, "sakrash"ga o'xshab ko'rinardi
-    // — shuning uchun fokus so'rovi sheet ochilish animatsiyasi tugagunicha
-    // kechiktiriladi.
-    Future.delayed(_kSheetAnimationStyle.duration ?? const Duration(milliseconds: 350), () {
-      if (mounted) FocusScope.of(context).requestFocus(_focus);
-    });
-    _loadHistory();
+    // Modal ochilganda avtomatik fokus ATAYLAB YO'Q — foydalanuvchi avval
+    // saqlangan manzillar/qidiruv tarixini bemalol ko'radi, klaviatura
+    // faqat inputga bosilganda chiqadi.
+    ref.read(clientAddressHistoryCacheProvider.notifier).refreshIfStale();
   }
 
   @override
@@ -1192,14 +1248,6 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
   }
 
   String _placeKey(Place p) => '${p.lat.toStringAsFixed(5)},${p.lng.toStringAsFixed(5)}';
-
-  Future<void> _loadHistory() async {
-    try {
-      final history = await ref.read(clientRepositoryProvider).getAddressHistory();
-      if (!mounted) return;
-      setState(() => _history = history);
-    } catch (_) {}
-  }
 
   // Har bir tugma bosilganda setState chaqirilaversa (qiymat allaqachon
   // bir xil bo'lsa ham), butun modal daraxti har bir belgi kiritilganda
@@ -1236,12 +1284,23 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
   // fon rejimida qidiruv tarixiga yoziladi (xato bo'lsa jimgina
   // e'tiborsiz qoldiriladi) va modal shu manzil bilan yopiladi.
   void _selectPlace(Place place) {
+    // Notifier ASYNC chaqiruvdan OLDIN, hali widget mounted paytida ushlab
+    // olinadi — `Navigator.pop()` shu metoddan DARHOL keyin chaqiriladi,
+    // ya'ni POST tugaguncha modal ALLAQACHON yopilgan (dispose qilingan)
+    // bo'ladi. Agar notifier .then() ICHIDA `ref.read(...)` bilan
+    // o'qilganda va `mounted` bilan tekshirilganda — mounted deyarli HAR
+    // DOIM false chiqib, forceRefresh() UMUMAN chaqirilmas edi (haqiqiy
+    // nuqson edi, endi mavjud emas). Notifier o'zi ProviderScope'da
+    // yashaydi (bu provider'lar autoDispose EMAS, keepAlive) — widget
+    // dispose bo'lishi unga ta'sir qilmaydi, shuning uchun keyinroq
+    // chaqirish xavfsiz, `mounted` tekshiruvi shart emas.
+    final historyNotifier = ref.read(clientAddressHistoryCacheProvider.notifier);
     unawaited(
       ref.read(clientRepositoryProvider).addAddressHistory(
             address: place.address.isNotEmpty ? place.address : place.name,
             latitude: place.lat,
             longitude: place.lng,
-          ).catchError((_) {}),
+          ).then((_) => historyNotifier.forceRefresh()).catchError((_) {}),
     );
     Navigator.pop(context, place);
   }
@@ -1267,6 +1326,14 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
     if (_savedPlaceKeys.contains(_placeKey(place))) return;
     final locale = ref.read(localeProvider).languageCode;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // _selectPlace()dagi bilan bir xil ehtiyot chorasi — bu metodda
+    // o'zining darhol o'zini-yopishi yo'q (faqat ICHKI tasdiq dialogi
+    // yopiladi, bu modal ochiq qoladi), shuning uchun mounted odatda
+    // true bo'lib qoladi — lekin baribir notifier oldindan ushlab
+    // olinadi, forceRefresh() esa widget dispose bo'lgan taqdirda ham
+    // (masalan foydalanuvchi saqlash davomida boshqa joyga o'tib
+    // ketsa) ishlashi uchun `mounted`ga bog'liq qilinmaydi.
+    final savedNotifier = ref.read(clientSavedAddressesCacheProvider.notifier);
     final nameCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1300,9 +1367,9 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
             latitude: place.lat,
             longitude: place.lng,
           );
+      savedNotifier.forceRefresh();
       if (!mounted) return;
       setState(() => _savedPlaceKeys.add(_placeKey(place)));
-      ref.read(clientSavedAddressesCacheProvider.notifier).forceRefresh();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppStrings.get('address_saved_snackbar', locale)), backgroundColor: AppTheme.successColor),
       );
@@ -1319,12 +1386,19 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
     final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
     final bg = isDark ? AppTheme.darkBackground : AppTheme.backgroundColor;
     final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
-    final savedAddresses =
-        ref.watch(clientSavedAddressesCacheProvider).valueOrNull ?? const <Map<String, dynamic>>[];
+    final savedAsync = ref.watch(clientSavedAddressesCacheProvider);
+    final savedAddresses = savedAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final savedLoading = savedAsync.isLoading && !savedAsync.hasValue;
+    final historyAsync = ref.watch(clientAddressHistoryCacheProvider);
+    final history = historyAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final historyLoading = historyAsync.isLoading && !historyAsync.hasValue;
     final hasQuery = _ctrl.text.trim().isNotEmpty;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      // viewInsetsOf — MediaQuery.of(context) to'liq obyektiga emas, faqat
+      // klaviatura balandligiga bog'lanish uchun (yuqoridagi asosiy modaldagi
+      // bilan bir xil asos).
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: FractionallySizedBox(
         heightFactor: 0.9,
         child: Container(
@@ -1417,18 +1491,17 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                       // olganda silliq qisqarib, X yonidan sirg'alib chiqadi
                       // — 44px balandlikdagi input ichiga zich sig'dirishga
                       // urinish (avval suffixIcon ichida edi) yo'q.
-                      AnimatedClearButton(
-                        controller: _ctrl,
-                        focusNode: _focus,
-                        onCleared: () => setState(() => _results = []),
-                      ),
+                      _searchClearButton,
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: !hasQuery
-                      ? _buildSuggestions(savedAddresses, textPrimary, textSecondary, border, locale)
+                      ? _buildSuggestions(
+                          savedAddresses, savedLoading, history, historyLoading,
+                          textPrimary, textSecondary, border, locale, isDark,
+                        )
                       : (_searching
                           ? const Center(child: AppLoadingIndicator(strokeWidth: 2))
                           : (_results.isEmpty
@@ -1474,7 +1547,7 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
                                 ))),
                 ),
                 Container(
-                  padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
+                  padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.paddingOf(context).bottom + 16),
                   decoration: BoxDecoration(
                     color: surface,
                     border: Border(top: BorderSide(color: border)),
@@ -1503,14 +1576,26 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
     );
   }
 
-  // "Saqlangan manzillar" va "Qidiruv tarixi" — ikkalasi ham aniq
-  // sarlavha bilan, faqat mos ro'yxat bo'sh bo'lmaganda ko'rsatiladi.
+  // "Saqlangan manzillar" va "Qidiruv tarixi" — ikkalasi ham aniq sarlavha
+  // bilan, faqat mos ro'yxat bo'sh (va yuklanmayotgan) bo'lmaganda
+  // ko'rsatiladi. CustomScrollView + SliverList.builder ishlatiladi —
+  // oddiy `ListView(children: [...savedAddresses.map(...), ...])` BARCHA
+  // elementlarni (ko'rinmaydiganlarini ham) darhol qurar edi; qidiruv
+  // tarixi vaqt o'tishi bilan katta bo'lishi mumkin, shuning uchun faqat
+  // ko'rinadigan elementlar quriladi (xuddi ListView.builder kabi).
   Widget _buildSuggestions(
-    List<Map<String, dynamic>> savedAddresses,
+    List<Map<String, dynamic>> savedAddresses, bool savedLoading,
+    List<Map<String, dynamic>> history, bool historyLoading,
     Color textPrimary, Color textSecondary, Color border,
-    String locale,
+    String locale, bool isDark,
   ) {
-    if (savedAddresses.isEmpty && _history.isEmpty) return const SizedBox.shrink();
+    final showSavedSkeleton = savedLoading && savedAddresses.isEmpty;
+    final showHistorySkeleton = historyLoading && history.isEmpty;
+    // Yuklanish tugagach (skeleton yo'q) va ro'yxat haqiqatan bo'sh bo'lsa —
+    // bo'sh holat xabari. Skeleton bilan bo'sh xabar BIR VAQTDA chiqmaydi
+    // (biri ikkinchisini istisno qiladi).
+    final savedEmpty = !showSavedSkeleton && savedAddresses.isEmpty;
+    final historyEmpty = !showHistorySkeleton && history.isEmpty;
 
     Place savedToPlace(Map<String, dynamic> item) => Place(
           name: item['name'] as String? ?? '',
@@ -1525,39 +1610,77 @@ class _AddressSearchModalState extends ConsumerState<_AddressSearchModal> {
           lng: (item['longitude'] as num).toDouble(),
         );
 
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
-        if (savedAddresses.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Text(AppStrings.get('saved_places', locale),
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
-          ),
-          ...savedAddresses.map((item) => _AddressResultTile(
+    Widget sectionHeader(String text) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+          child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
+        );
+
+    // Bo'sh holat xabari — alohida katta blok emas, mavjud tile
+    // paddingiga mos oddiy bitta qator matn. Chiziq YO'Q (border) —
+    // bo'lim-ajratuvchi Divider bilan ikkita chiziq yonma-yon
+    // tushmasligi uchun.
+    Widget emptyRow(String text) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Text(text, style: TextStyle(fontSize: 12, color: textSecondary)),
+        );
+
+    // "Saqlangan manzillar" yuklanmoqda holatida 2 ta, "Qidiruv tarixi"
+    // yuklanmoqda holatida 5 ta skelet-card ko'rsatiladi (talab qilingan
+    // sonlar) — haqiqiy ma'lumot kelgach ularning o'rnini bosadi.
+    final savedCount = showSavedSkeleton ? 2 : savedAddresses.length;
+    final historyCount = showHistorySkeleton ? 5 : history.length;
+
+    // Ikkala bo'lim sarlavhasi ham HAR DOIM ko'rinadi (ro'yxat bo'sh
+    // bo'lsa ham) — shu sabab hasSavedSection/hasHistorySection shartlari
+    // endi kerak emas.
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: sectionHeader(AppStrings.get('saved_places', locale))),
+        if (savedEmpty)
+          SliverToBoxAdapter(child: emptyRow(AppStrings.get('saved_places_empty', locale)))
+        else
+          SliverList.builder(
+            itemCount: savedCount,
+            itemBuilder: (ctx, i) {
+              if (showSavedSkeleton) {
+                // OXIRGI skelet-card — pastida chiziq yo'q (pastdagi
+                // "Qidiruv tarixi" Divideri bilan ikkita chiziq yonma-yon
+                // tushmasin).
+                return _AddressTileSkeleton(isDark: isDark, border: border, showBottomBorder: i != savedCount - 1);
+              }
+              final item = savedAddresses[i];
+              return _AddressResultTile(
                 place: savedToPlace(item),
                 icon: Icons.bookmark,
                 iconColor: AppTheme.primaryColor,
                 textPrimary: textPrimary, textSecondary: textSecondary, border: border,
                 onTap: () => _selectPlace(savedToPlace(item)),
-              )),
-        ],
-        if (savedAddresses.isNotEmpty && _history.isNotEmpty)
-          Divider(height: 24, thickness: 1, color: border),
-        if (_history.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Text(AppStrings.get('search_history_title', locale),
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textSecondary, letterSpacing: 0.4)),
+                // OXIRGI card — pastida chiziq yo'q: aks holda pastdagi
+                // "Qidiruv tarixi" bo'limi oldidan keladigan Divider bilan
+                // ikkita chiziq yonma-yon tushib qolardi.
+                showBottomBorder: i != savedCount - 1,
+              );
+            },
           ),
-          ..._history.map((item) => _AddressResultTile(
+        SliverToBoxAdapter(child: Divider(height: 24, thickness: 1, color: border)),
+        SliverToBoxAdapter(child: sectionHeader(AppStrings.get('search_history_title', locale))),
+        if (historyEmpty)
+          SliverToBoxAdapter(child: emptyRow(AppStrings.get('search_history_empty', locale)))
+        else
+          SliverList.builder(
+            itemCount: historyCount,
+            itemBuilder: (ctx, i) {
+              if (showHistorySkeleton) return _AddressTileSkeleton(isDark: isDark, border: border);
+              final item = history[i];
+              return _AddressResultTile(
                 place: historyToPlace(item),
                 icon: Icons.history,
                 iconColor: textSecondary,
                 textPrimary: textPrimary, textSecondary: textSecondary, border: border,
                 onTap: () => _selectPlace(historyToPlace(item)),
-              )),
-        ],
+              );
+            },
+          ),
       ],
     );
   }
@@ -1574,11 +1697,17 @@ class _AddressResultTile extends StatelessWidget {
   final Color border;
   final VoidCallback onTap;
   final Widget? trailing;
+  // "Saqlangan manzillar" ro'yxatining OXIRGI cardida false qilib
+  // beriladi — aks holda undan keyin keladigan "Qidiruv tarixi"
+  // sarlavhasi tepasidagi Divider bilan yonma-yon ikkita chiziq
+  // tushib, xunuk ko'rinardi. Divider'ning o'zi ikki bo'limni
+  // ajratish uchun yetarli.
+  final bool showBottomBorder;
 
   const _AddressResultTile({
     required this.place, required this.icon, required this.iconColor,
     required this.textPrimary, required this.textSecondary, required this.border,
-    required this.onTap, this.trailing,
+    required this.onTap, this.trailing, this.showBottomBorder = true,
   });
 
   @override
@@ -1590,7 +1719,7 @@ class _AddressResultTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: border, width: 0.5)),
+            border: showBottomBorder ? Border(bottom: BorderSide(color: border, width: 0.5)) : null,
           ),
           child: Row(children: [
             Container(width: 32, height: 32,
@@ -1608,6 +1737,55 @@ class _AddressResultTile extends StatelessWidget {
             if (trailing != null) trailing!,
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// _AddressResultTile bilan BIR XIL shaklda (ikonka qutisi + nom qatori +
+/// manzil qatori) miltillovchi skelet — "Saqlangan manzillar"/"Qidiruv
+/// tarixi" hali yuklanayotganda o'rniga ko'rsatiladi (region_picker_page.dart
+/// dagi _SkeletonRow bilan bir xil shimmer rang naqshi, loyihada allaqachon
+/// o'rnatilgan uslub).
+class _AddressTileSkeleton extends StatelessWidget {
+  final bool isDark;
+  final Color border;
+  // _AddressResultTile.showBottomBorder bilan bir xil sabab — bo'limning
+  // OXIRGI skelet-cardida false qilib beriladi, aks holda undan keyin
+  // keladigan bo'lim-ajratuvchi Divider bilan ikkita chiziq yonma-yon
+  // tushib qolardi.
+  final bool showBottomBorder;
+  const _AddressTileSkeleton({required this.isDark, required this.border, this.showBottomBorder = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final highlight = isDark ? const Color(0xFF475569) : const Color(0xFFF1F5F9);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: showBottomBorder ? Border(bottom: BorderSide(color: border, width: 0.5)) : null,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: base,
+        highlightColor: highlight,
+        child: Row(children: [
+          Container(width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(width: 140, height: 12,
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                const SizedBox(height: 6),
+                Container(width: 90, height: 10,
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+              ],
+            ),
+          ),
+        ]),
       ),
     );
   }
@@ -1660,7 +1838,7 @@ class _TruckThumbnail extends StatelessWidget {
     // height proporsional hisoblanadi, aks holda kvadrat bo'lmagan rasm
     // cho'ziladi). Bo'lmasa, backenddagi asl o'lchamdagi rasm har safar
     // ro'yxatga kirganda to'liq dekodlanib, scroll'ni qotirar edi.
-    final cacheW = (size * MediaQuery.of(context).devicePixelRatio).round();
+    final cacheW = (size * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Image.network(
@@ -1668,7 +1846,41 @@ class _TruckThumbnail extends StatelessWidget {
         width: size, height: size,
         fit: BoxFit.contain,
         cacheWidth: cacheW,
+        // _preloadTruckImages() (order_form_modal.dart) rasmlarni modal
+        // ochilishidan oldin precacheImage() bilan oldindan yuklab qo'yadi,
+        // shuning uchun loadingBuilder odatda darhol `child`ni qaytaradi —
+        // faqat precache hali ulgurmagan (masalan birinchi ochilish) yoki
+        // sekin tarmoqda haqiqatan kutish kerak bo'lganda skelet ko'rinadi.
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : _TruckImageSkeleton(size: size, radius: radius),
         errorBuilder: (context, error, stackTrace) => placeholder,
+      ),
+    );
+  }
+}
+
+/// Mashina rasmi hali yuklanayotganda o'rniga ko'rsatiladigan, aynan
+/// _TruckThumbnail shakliga (dumaloq burchakli kvadrat) mos miltillovchi
+/// skelet — o'rtasida xira yuk mashinasi siluetimi bilan (oddiy aylanuvchi
+/// spinner emas).
+class _TruckImageSkeleton extends StatelessWidget {
+  final double size;
+  final double radius;
+  const _TruckImageSkeleton({required this.size, required this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final highlight = isDark ? const Color(0xFF475569) : const Color(0xFFF1F5F9);
+    return Shimmer.fromColors(
+      baseColor: base,
+      highlightColor: highlight,
+      child: Container(
+        width: size, height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(radius)),
+        child: Icon(Icons.local_shipping_outlined, size: size * 0.5, color: Colors.white),
       ),
     );
   }
@@ -1685,12 +1897,26 @@ class _TruckPickerSheet extends ConsumerStatefulWidget {
 }
 
 class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
-  String? _tempSelected;
+  // ValueNotifier — tanlov o'zgarganda BUTUN ro'yxat (barcha
+  // _TruckThumbnail'lar bilan birga) qayta qurilmasligi uchun. O'lchov
+  // bilan tasdiqlandi: avval setState() ishlatilganda, bitta element
+  // tanlanganda RO'YXATDAGI HAMMA element qayta qurilardi (radio doirasi
+  // o'zgargan bitta elementga ham, o'zgarmagan qolgan barchasiga ham).
+  // Endi faqat radio doirasi va pastki "Tanlash" tugmasi shu qiymatga
+  // obuna bo'ladi — ro'yxatning qolgan qismi (rasm, nom, sig'im matni)
+  // umuman qayta qurilmaydi.
+  late final ValueNotifier<String?> _tempSelected;
 
   @override
   void initState() {
     super.initState();
-    _tempSelected = widget.initialType;
+    _tempSelected = ValueNotifier<String?>(widget.initialType);
+  }
+
+  @override
+  void dispose() {
+    _tempSelected.dispose();
+    super.dispose();
   }
 
   @override
@@ -1733,33 +1959,53 @@ class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
               ),
             ]),
             const SizedBox(height: 12),
+            // shrinkWrap: true — QASDDAN qaytarildi. Avval balandlik
+            // (itemCount * _kTruckRowHeight taxminiy konstanta orqali)
+            // HISOBLAB, har qatorni SizedBox(height: _kTruckRowHeight)
+            // ichiga qattiq o'rab qo'yish sinab ko'rilgan edi — lekin bu
+            // TAXMINNI KAFOLATGA emas, balki haqiqiy KESILISH (RenderFlex
+            // overflow) xavfiga aylantirdi: vidjet testi bilan o'lchov
+            // ko'rsatdiki, foydalanuvchi shrift o'lchamini kattalashtirsa
+            // (textScaler — Android/iOS'ning "Katta matn" sozlamasi),
+            // matn ustuni 48px'dan OSHIB KETADI (masalan textScaler=1.3'da
+            // 2px, 2.0'da 28px "RenderFlex overflowed" xatosi — sariq-qora
+            // chiziqlar bilan). Bu qattiq balandlikdagi kesilishdan ko'ra
+            // YOMONROQ ko'rinish nuqsoni bo'lar edi. shrinkWrap: true esa
+            // qatorlarning HAQIQIY (istalgan shrift o'lchamida to'g'ri)
+            // balandligini o'zi hisoblaydi — kam mashina turi bo'lgani
+            // uchun (odatda bir necha o'nlab emas) performance narxi past.
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: widget.trucks.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (ctx, i) {
                   final t = widget.trucks[i];
-                  final selected = _tempSelected == t['type'];
                   return GestureDetector(
-                    onTap: () => setState(() => _tempSelected = t['type'] as String),
+                    onTap: () => _tempSelected.value = t['type'] as String,
                     child: Row(
                       children: [
-                        Container(
-                          width: 22, height: 22,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: selected ? AppTheme.primaryColor : Colors.transparent,
-                            border: Border.all(color: selected ? AppTheme.primaryColor : border, width: 2),
-                          ),
-                          child: selected
-                              ? Container(
-                                  width: 8, height: 8,
-                                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                                )
-                              : null,
+                        ValueListenableBuilder<String?>(
+                          valueListenable: _tempSelected,
+                          builder: (context, selectedValue, _) {
+                            final selected = selectedValue == t['type'];
+                            return Container(
+                              width: 22, height: 22,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected ? AppTheme.primaryColor : Colors.transparent,
+                                border: Border.all(color: selected ? AppTheme.primaryColor : border, width: 2),
+                              ),
+                              child: selected
+                                  ? Container(
+                                      width: 8, height: 8,
+                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                                    )
+                                  : null,
+                            );
+                          },
                         ),
                         const SizedBox(width: 16),
                         _TruckThumbnail(
@@ -1810,24 +2056,29 @@ class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: GestureDetector(
-                  onTap: _tempSelected != null ? () => Navigator.pop(context, _tempSelected) : null,
-                  child: Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: _tempSelected != null
-                          ? const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight)
-                          : null,
-                      color: _tempSelected != null ? null : Colors.grey.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Center(
-                      child: Text(
-                        AppStrings.get('select_button', locale),
-                        style: TextStyle(color: _tempSelected != null ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700),
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _tempSelected,
+                  builder: (context, selectedValue, _) {
+                    return GestureDetector(
+                      onTap: selectedValue != null ? () => Navigator.pop(context, selectedValue) : null,
+                      child: Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          gradient: selectedValue != null
+                              ? const LinearGradient(colors: [Color(0xFF0f172a), Color(0xFF1e3a8a), Color(0xFF3b82f6)], begin: Alignment.centerLeft, end: Alignment.centerRight)
+                              : null,
+                          color: selectedValue != null ? null : Colors.grey.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: Text(
+                            AppStrings.get('select_button', locale),
+                            style: TextStyle(color: selectedValue != null ? Colors.white : Colors.grey, fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
             ]),
@@ -2145,7 +2396,7 @@ class _HelpInfoSheet extends StatelessWidget {
             // maksimal balandlikdan oshib ketmay, o'zi ichida scroll
             // qiladi (ekrandan chiqmaydi).
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2324,29 +2575,20 @@ class _RegionsListSheet extends ConsumerStatefulWidget {
 }
 
 class _RegionsListSheetState extends ConsumerState<_RegionsListSheet> {
-  bool _loading = true;
-  List<GeoRegion> _regions = [];
-
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final list = await ref.read(geoRepositoryProvider).getAllRegions();
-    list.sort((a, b) => a.name.compareTo(b.name));
-    if (!mounted) return;
-    setState(() {
-      _regions = list;
-      _loading = false;
-    });
+    ref.read(clientRegionsCacheProvider.notifier).refreshIfStale();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = ref.watch(localeProvider).languageCode;
+    final regionsAsync = ref.watch(clientRegionsCacheProvider);
+    final loading = regionsAsync.isLoading && !regionsAsync.hasValue;
+    final regions = [...regionsAsync.valueOrNull ?? const <GeoRegion>[]]
+      ..sort((a, b) => a.name.compareTo(b.name));
     final surface = isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
@@ -2388,13 +2630,13 @@ class _RegionsListSheetState extends ConsumerState<_RegionsListSheet> {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: _loading
+                child: loading
                     ? const Center(child: AppLoadingIndicator())
                     : ListView.separated(
-                        itemCount: _regions.length,
+                        itemCount: regions.length,
                         separatorBuilder: (_, __) => Divider(height: 1, color: border),
                         itemBuilder: (ctx, i) {
-                          final region = _regions[i];
+                          final region = regions[i];
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             child: Row(children: [

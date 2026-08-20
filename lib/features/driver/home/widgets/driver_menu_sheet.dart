@@ -43,7 +43,7 @@ class _DriverMenuSheetState extends ConsumerState<DriverMenuSheet> {
         color: surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 12, top: 12),
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 12, top: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

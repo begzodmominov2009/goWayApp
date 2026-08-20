@@ -82,7 +82,27 @@ class AppRoutes {
 // Sahifalar orasida o'tishni kuzatish uchun — Home ekranidagi
 // logo/manzil panelini boshqa sahifaga o'tilganda yashirish, qaytib
 // kelganda qayta ko'rsatish uchun ishlatiladi.
+//
+// DIQQAT: RouteObserver<R>.didPush/didPop faqat
+// `route is R && previousRoute is R` bo'lgandagina ishlaydi (Flutter
+// framework, widgets/routes.dart). showModalBottomSheet/showDialog
+// ModalBottomSheetRoute/DialogRoute (ikkalasi ham PopupRoute'dan, ya'ni
+// ModalRoute'ning filiali) yaratadi — bular PageRoute EMAS. Shu sabab bu
+// observer faqat GoRoute sahifa o'tishlarini (PageRoute -> PageRoute)
+// ko'radi, bottom-sheet/dialog ochilishini UMUMAN ko'rmaydi. Buni
+// kengaytirish (masalan ModalRoute<void>ga) mavjud ishlatuvchilarning
+// xatti-harakatini o'zgartirib qo'yadi — shuning uchun tegilmaydi,
+// bottom-sheet/dialog darajasidagi kuzatuv uchun pastdagi
+// [freezeRouteObserver] ishlatiladi.
 final routeObserver = RouteObserver<PageRoute>();
+
+// Home ustida ochiladigan HAR QANDAY ModalRoute (to'liq sahifa HAM,
+// showModalBottomSheet/showDialog kabi bottom-sheet/dialog HAM) haqida
+// xabar berish uchun — masalan buyurtma-modali ochiq turganda xaritani
+// "muzlatish" (ClientHomeScreen). Flutter'ning o'zi tavsiya qilgan naqsh:
+// "to watch for all ModalRoute variants, the RouteObserver<ModalRoute<dynamic>>
+// (yoki <void>) type may be used" (RouteObserver doc, routes.dart).
+final freezeRouteObserver = RouteObserver<ModalRoute<void>>();
 
 // Instagram/iOS uslubidagi "o'ngdan chapga siljish" animatsiyasi —
 // barcha GoRoute'larda builder o'rniga shu funksiya ishlatiladi.
@@ -138,7 +158,7 @@ CustomTransitionPage _fadePage(Widget child, GoRouterState state) {
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.splash,
-    observers: [routeObserver],
+    observers: [routeObserver, freezeRouteObserver],
     routes: [
       GoRoute(
         path: AppRoutes.splash,

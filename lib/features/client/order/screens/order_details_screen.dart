@@ -864,7 +864,7 @@ class _TruckPickerSheetState extends ConsumerState<_TruckPickerSheet> {
             ]),
             const SizedBox(height: 12),
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: widget.trucks.length,

@@ -1022,7 +1022,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
       ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
       ),
       child: _success
           ? Column(mainAxisSize: MainAxisSize.min, children: [

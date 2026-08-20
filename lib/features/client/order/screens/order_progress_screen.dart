@@ -530,7 +530,7 @@ class _OrderProgressScreenState extends ConsumerState<OrderProgressScreen> {
               ),
               padding: EdgeInsets.only(
                 left: 16, right: 16, top: 12,
-                bottom: MediaQuery.of(context).padding.bottom + 16,
+                bottom: MediaQuery.paddingOf(context).bottom + 16,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -796,7 +796,7 @@ class _ScheduledOrderTicketSheet extends StatelessWidget {
     final cardBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         decoration: BoxDecoration(
           color: surface,
@@ -944,7 +944,7 @@ class _DriverNotFoundSheet extends ConsumerWidget {
     final cardBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
           decoration: BoxDecoration(
             color: surface,

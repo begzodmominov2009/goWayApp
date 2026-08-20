@@ -477,7 +477,7 @@ class _SelectAddressScreenState extends ConsumerState<SelectAddressScreen> {
             // "Manzil tasdiqlash" faqat ikkala manzil to'ldirilganda
             // ko'rinadi.
             Container(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
+              padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.paddingOf(context).bottom + 16),
               decoration: BoxDecoration(
                 color: surface,
                 border: Border(top: BorderSide(color: border)),

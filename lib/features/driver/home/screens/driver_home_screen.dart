@@ -1077,7 +1077,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
     final surface = _isDark ? AppTheme.darkSurface : Colors.white;
     final textPrimary = _isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final textSecondary = _isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
       body: Stack(
@@ -1258,7 +1258,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> with RouteA
           if (_activeOrder != null && _currentSteps.isNotEmpty && !_activeSheetExpanded)
             Positioned(
               left: 16, right: 16,
-              bottom: MediaQuery.of(context).padding.bottom + 74,
+              bottom: MediaQuery.paddingOf(context).bottom + 74,
               child: _TurnByTurnPanel(
                 step: _currentSteps[_currentStepIndex.clamp(0, _currentSteps.length - 1)],
                 stepIndex: _currentStepIndex,
@@ -1582,7 +1582,7 @@ class _EmptySheet extends StatelessWidget {
         ),
         padding: EdgeInsets.only(
           left: 20, right: 20, top: 12,
-          bottom: MediaQuery.of(context).padding.bottom + 12,
+          bottom: MediaQuery.paddingOf(context).bottom + 12,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1685,7 +1685,7 @@ class _OrderSheet extends StatelessWidget {
       ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 6,
+        bottom: MediaQuery.paddingOf(context).bottom + 6,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2208,7 +2208,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
     bool dragCollapsed = false;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.66),
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.66),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -2475,7 +2475,7 @@ class _ActiveOrderSheet extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.only(
               left: 20, right: 20, top: 12,
-              bottom: MediaQuery.of(context).padding.bottom + 16,
+              bottom: MediaQuery.paddingOf(context).bottom + 16,
             ),
             child: isPickup
                 ? Row(children: [
@@ -2561,7 +2561,7 @@ class _ActiveOrderMiniPanel extends StatelessWidget {
         ),
         padding: EdgeInsets.only(
           left: 18, right: 12, top: 12,
-          bottom: MediaQuery.of(context).padding.bottom + 12,
+          bottom: MediaQuery.paddingOf(context).bottom + 12,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,

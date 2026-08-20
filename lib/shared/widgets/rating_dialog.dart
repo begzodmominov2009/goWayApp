@@ -119,13 +119,13 @@ class _RatingDialogState extends ConsumerState<RatingDialog> {
     return PopScope(
       canPop: false,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
         child: Container(
           decoration: BoxDecoration(
             color: surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
             child: Column(

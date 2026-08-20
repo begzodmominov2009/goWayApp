@@ -922,7 +922,7 @@ class _VehicleEditSheetState extends ConsumerState<_VehicleEditSheet> {
         child: GestureDetector(
           onTap: () {},
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.85,
+            height: MediaQuery.sizeOf(context).height * 0.85,
             decoration: BoxDecoration(
               color: surface,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1305,7 +1305,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
       ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
       ),
       child: _success
           ? Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1582,7 +1582,7 @@ class _ChangePhoneSheetState extends ConsumerState<_ChangePhoneSheet> {
       ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
       ),
       child: _success
           ? Column(mainAxisSize: MainAxisSize.min, children: [

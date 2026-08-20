@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../network/driver_repository.dart';
+import '../network/geo_repository.dart';
 
 // ============================================================================
 // Driver "Cache Provider" arxitekturasi
@@ -134,6 +135,23 @@ final driverTopupHistoryCacheProvider = AsyncNotifierProvider<
 );
 
 // ---------------------------------------------------------------------------
+// Barcha viloyatlar ro'yxati (GET /regions/all) — region_picker_page.dart
+// (RegionPickerPage) shu keshdan foydalanadi. client_cache_providers.dart
+// dagi clientRegionsCacheProvider bilan bir xil ma'lumot/endpoint — ammo
+// bu yerda Driver'ning o'z kesh naqshi (_CachedDriverNotifier) ishlatiladi,
+// chunki u shu faylga xos (private) va Client'niki bilan ulashilmaydi.
+// ---------------------------------------------------------------------------
+class DriverRegionsNotifier extends _CachedDriverNotifier<List<GeoRegion>> {
+  @override
+  Future<List<GeoRegion>> fetch() => ref.read(geoRepositoryProvider).getAllRegions();
+}
+
+final driverRegionsCacheProvider =
+    AsyncNotifierProvider<DriverRegionsNotifier, List<GeoRegion>>(
+  DriverRegionsNotifier.new,
+);
+
+// ---------------------------------------------------------------------------
 // Bitta buyurtma tafsiloti (orderId bo'yicha). Yuqoridagilardan farqli —
 // bu FAMILY: har bir orderId o'zining ALOHIDA keshiga ega (parametrsiz
 // _CachedDriverNotifier naqshiga sig'maydi, chunki u parametr qabul qilmaydi).
@@ -152,5 +170,6 @@ void invalidateDriverCaches(WidgetRef ref) {
   ref.invalidate(driverWalletCacheProvider);
   ref.invalidate(driverHistoryCacheProvider);
   ref.invalidate(driverTopupHistoryCacheProvider);
+  ref.invalidate(driverRegionsCacheProvider);
   ref.invalidate(driverOrderDetailProvider);
 }

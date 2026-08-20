@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../network/client_repository.dart';
+import '../network/geo_repository.dart';
 
 // ============================================================================
 // Client "Cache Provider" arxitekturasi
@@ -148,6 +149,41 @@ final clientTrucksCacheProvider =
 );
 
 // ---------------------------------------------------------------------------
+// Manzil qidiruv tarixi (GET /address-history) — order_form_modal.dart
+// dagi _AddressSearchModal, input bo'sh bo'lganda "Saqlangan manzillar"
+// bilan birga ko'rsatadi. saveSavedAddress() dagi kabi — yangi manzil
+// tanlanib POST /address-history ketganda, chaqiruvchi taraf
+// forceRefresh() chaqiradi (order_form_modal.dart: _selectPlace).
+// ---------------------------------------------------------------------------
+class ClientAddressHistoryNotifier
+    extends _CachedClientNotifier<List<Map<String, dynamic>>> {
+  @override
+  Future<List<Map<String, dynamic>>> fetch() =>
+      ref.read(clientRepositoryProvider).getAddressHistory();
+}
+
+final clientAddressHistoryCacheProvider = AsyncNotifierProvider<
+    ClientAddressHistoryNotifier, List<Map<String, dynamic>>>(
+  ClientAddressHistoryNotifier.new,
+);
+
+// ---------------------------------------------------------------------------
+// Barcha viloyatlar ro'yxati (GET /regions/all) — order_form_modal.dart
+// dagi _RegionsListSheet (faqat ko'rish uchun ro'yxat) shu keshdan
+// foydalanadi. Global/statik ma'lumot, kamdan-kam o'zgaradi — mashina
+// turlari bilan bir xil sabab.
+// ---------------------------------------------------------------------------
+class ClientRegionsNotifier extends _CachedClientNotifier<List<GeoRegion>> {
+  @override
+  Future<List<GeoRegion>> fetch() => ref.read(geoRepositoryProvider).getAllRegions();
+}
+
+final clientRegionsCacheProvider =
+    AsyncNotifierProvider<ClientRegionsNotifier, List<GeoRegion>>(
+  ClientRegionsNotifier.new,
+);
+
+// ---------------------------------------------------------------------------
 // Bitta buyurtma tafsiloti (orderId bo'yicha). Yuqoridagilardan farqli —
 // bu FAMILY: har bir orderId o'zining ALOHIDA keshiga ega (parametrsiz
 // _CachedClientNotifier naqshiga sig'maydi, chunki u parametr qabul qilmaydi).
@@ -167,5 +203,7 @@ void invalidateClientCaches(WidgetRef ref) {
   ref.invalidate(clientOrdersHistoryCacheProvider);
   ref.invalidate(clientSavedAddressesCacheProvider);
   ref.invalidate(clientTrucksCacheProvider);
+  ref.invalidate(clientAddressHistoryCacheProvider);
+  ref.invalidate(clientRegionsCacheProvider);
   ref.invalidate(clientOrderDetailProvider);
 }

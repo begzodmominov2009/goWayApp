@@ -236,7 +236,7 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
                   },
                 ),
       bottomNavigationBar: Container(
-        padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 16),
+        padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.paddingOf(context).bottom + 16),
         decoration: BoxDecoration(color: surface, border: Border(top: BorderSide(color: border))),
         child: GestureDetector(
           onTap: _openAddForm,
@@ -412,7 +412,7 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
     final canSave = !_saving && _addressCtrl.text.trim().isNotEmpty && _lat != null && _lng != null;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         decoration: BoxDecoration(
           color: surface,
