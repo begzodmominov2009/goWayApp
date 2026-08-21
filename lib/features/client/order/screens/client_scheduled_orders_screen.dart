@@ -123,6 +123,13 @@ class _ClientScheduledOrdersScreenState extends ConsumerState<ClientScheduledOrd
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: _kSheetAnimationStyle,
+      // useSafeArea: true — MUHIM (5-band). showModalBottomSheet standart
+      // holatda (useSafeArea: false) MediaQuery.removePadding(removeTop:
+      // true) qo'llaydi — bu ICHKI SafeArea'ni no-op qilib qo'yadi, top
+      // xavfsiz maydon nolga tenglashadi. true qilinganda Flutter o'zi
+      // SafeArea(bottom:false) bilan o'raydi — sarlavha+X qatori status
+      // bar ostida qolib ketmaydi, qurilmadan qurilmaga moslashadi.
+      useSafeArea: true,
       builder: (ctx) => _ClientOrderDetailSheet(
         order: order,
         onCancelled: () {
@@ -616,106 +623,134 @@ class _ClientOrderDetailSheetState extends ConsumerState<_ClientOrderDetailSheet
     final note = order['note'] as String?;
     final timeText = _formatTime(order['scheduledFor']);
 
+    // 1-band: butun sheet balandligi 90% bilan cheklanadi (ConstrainedBox —
+    // FAQAT maksimal chegara, FractionallySizedBox EMAS, chunki oxirgisi
+    // qat'iy o'lcham berardi va qisqa mazmunda ham pastda ortiqcha bo'sh
+    // joy/"sakrash" qoldirardi). Mazmun (detail qatorlar) shu chegaradan
+    // OSHSA — faqat O'RTADAGI qism (Flexible+SingleChildScrollView)
+    // ichida scroll bo'ladi; sarlavha+X (tepada) va "Bekor qilish"
+    // tugmasi (pastda) — HAR DOIM ko'rinadigan, DOIM ekranda qotib
+    // turadigan qismlar (order_form_modal.dart dagi "Tasdiqlash" tugmasi
+    // bilan bir xil, loyihada allaqachon o'rnashgan naqsh — scroll
+    // oxirida ko'rsatish emas, doim pastda ushlab turish).
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.paddingOf(context).bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
+        child: Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: Column(children: [
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(AppStrings.get('order_detail_title', locale),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
+                      ),
+                      CloseCircleButton(
+                        bg: tabBg, iconColor: textSecondary,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ]),
               ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(AppStrings.get('order_detail_title', locale),
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
-                ),
-                CloseCircleButton(
-                  bg: tabBg, iconColor: textSecondary,
-                  onTap: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(icon: Icons.local_shipping, label: AppStrings.get('from_label', locale), value: fromAddress,
-                bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            const SizedBox(height: 12),
-            _DetailRow(icon: Icons.flag, label: AppStrings.get('to_label', locale), value: toAddress,
-                bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            if (timeText.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _DetailRow(icon: Icons.access_time, label: AppStrings.get('scheduled_time_label', locale), value: timeText,
-                  bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            ],
-            const SizedBox(height: 12),
-            _DetailRow(
-              icon: Icons.local_shipping_outlined,
-              label: AppStrings.get('vehicle_type_label', locale),
-              value: truckType,
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-              stacked: true,
-            ),
-            const SizedBox(height: 12),
-            _DetailRow(
-              icon: Icons.scale_outlined,
-              label: AppStrings.get('weight_label', locale),
-              value: weight != null ? '$weight t' : '-',
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-            ),
-            if (loadTypeLabel != null) ...[
-              const SizedBox(height: 12),
-              _DetailRow(icon: Icons.swap_vert, label: AppStrings.get('load_type_label', locale), value: loadTypeLabel,
-                  bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            ],
-            if (cargoType != null && cargoType.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _DetailRow(icon: Icons.inventory_2_outlined, label: AppStrings.get('cargo_type_label', locale), value: cargoType,
-                  bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            ],
-            if (distance != null) ...[
-              const SizedBox(height: 12),
-              _DetailRow(icon: Icons.route_outlined, label: AppStrings.get('route_distance_label', locale), value: '${distance.toStringAsFixed(1)} km',
-                  bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            ],
-            const SizedBox(height: 12),
-            _DetailRow(
-              icon: Icons.payments_outlined,
-              label: AppStrings.get('price_label', locale),
-              value: price > 0 ? '${_formatPrice(price)} so\'m' : AppStrings.get('price_not_set', locale),
-              bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
-            ),
-            if (note != null && note.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _DetailRow(icon: Icons.notes_outlined, label: AppStrings.get('note_label', locale), value: note,
-                  bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
-            ],
-            const SizedBox(height: 18),
-            Center(
-              child: TextButton(
-                onPressed: _confirmCancel,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.errorColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                ),
-                child: Text(
-                  AppStrings.get('cancel', locale),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _DetailRow(icon: Icons.local_shipping, label: AppStrings.get('from_label', locale), value: fromAddress,
+                          bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      const SizedBox(height: 12),
+                      _DetailRow(icon: Icons.flag, label: AppStrings.get('to_label', locale), value: toAddress,
+                          bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      if (timeText.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _DetailRow(icon: Icons.access_time, label: AppStrings.get('scheduled_time_label', locale), value: timeText,
+                            bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      ],
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        icon: Icons.local_shipping_outlined,
+                        label: AppStrings.get('vehicle_type_label', locale),
+                        value: truckType,
+                        bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+                      ),
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        icon: Icons.scale_outlined,
+                        label: AppStrings.get('weight_label', locale),
+                        value: weight != null ? '$weight t' : '-',
+                        bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+                      ),
+                      if (loadTypeLabel != null) ...[
+                        const SizedBox(height: 12),
+                        _DetailRow(icon: Icons.swap_vert, label: AppStrings.get('load_type_label', locale), value: loadTypeLabel,
+                            bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      ],
+                      if (cargoType != null && cargoType.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _DetailRow(icon: Icons.inventory_2_outlined, label: AppStrings.get('cargo_type_label', locale), value: cargoType,
+                            bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      ],
+                      if (distance != null) ...[
+                        const SizedBox(height: 12),
+                        _DetailRow(icon: Icons.route_outlined, label: AppStrings.get('route_distance_label', locale), value: '${distance.toStringAsFixed(1)} km',
+                            bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      ],
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        icon: Icons.payments_outlined,
+                        label: AppStrings.get('price_label', locale),
+                        value: price > 0 ? '${_formatPrice(price)} so\'m' : AppStrings.get('price_not_set', locale),
+                        bg: bgCard, border: border, textP: textPrimary, textS: textSecondary,
+                      ),
+                      if (note != null && note.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _DetailRow(icon: Icons.notes_outlined, label: AppStrings.get('note_label', locale), value: note,
+                            bg: bgCard, border: border, textP: textPrimary, textS: textSecondary),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, 6, 20, MediaQuery.paddingOf(context).bottom + 16),
+                child: Center(
+                  child: TextButton(
+                    onPressed: _confirmCancel,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.errorColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    ),
+                    child: Text(
+                      AppStrings.get('cancel', locale),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -833,7 +868,16 @@ class _CancelConfirmSheetState extends ConsumerState<_CancelConfirmSheet> {
                         side: BorderSide(color: border),
                         foregroundColor: textPrimary,
                       ),
-                      child: Text(AppStrings.get('no_keep_order', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      // 4-band: matn hech qachon 2-qatorga o'ralib tugma
+                      // balandligidan (48px, minimumSize orqali qat'iy)
+                      // toshib ketmasin — FittedBox(scaleDown) matn
+                      // sig'masa shriftni bitta qatorda joylashguncha
+                      // (kesilmasdan, o'ralmasdan) kichraytiradi.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(AppStrings.get('no_keep_order', locale), maxLines: 1,
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -851,7 +895,11 @@ class _CancelConfirmSheetState extends ConsumerState<_CancelConfirmSheet> {
                               width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2.4, valueColor: AlwaysStoppedAnimation(Colors.white)),
                             )
-                          : Text(AppStrings.get('yes_cancel_order', locale), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(AppStrings.get('yes_cancel_order', locale), maxLines: 1,
+                                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                            ),
                     ),
                   ),
                 ],
@@ -872,52 +920,153 @@ class _DetailRow extends StatelessWidget {
   final Color border;
   final Color textP;
   final Color textS;
-  // true bo'lsa, qiymat sarlavha ostida (kichikroq fontda, unga yaqin)
-  // ko'rsatiladi — label bilan qatorda emas. Uzun/kelajakda uzayadigan
-  // qiymatlar (masalan mashina turi) uchun, to'liq qator kengligida
-  // 2 qatorgacha o'ralishi kerak bo'lganda ishlatiladi.
-  final bool stacked;
 
   const _DetailRow({
     required this.icon, required this.label, required this.value,
     required this.bg, required this.border, required this.textP, required this.textS,
-    this.stacked = false,
   });
+
+  // 3-band: "ko'z" ikonkasi FAQAT qiymat HAQIQATAN bitta qatorga
+  // sig'masdan qisqarganda chiqishi kerak — oldindan taxmin qilingan
+  // belgilangan uzunlik (masalan "20 ta belgidan uzun bo'lsa") EMAS.
+  // TextPainter bilan xuddi shu style/maxLines/textScaler'da HAQIQIY
+  // o'lchov qilinadi va .didExceedMaxLines tekshiriladi. "Ko'z" o'zi
+  // ham gorizontal joy egallaydigan bo'lgani uchun (aylanma bog'liqlik:
+  // ko'z ko'rinishi qiymat kengligiga, qiymat kengligi esa ko'z bor-
+  // yo'qligiga bog'liq bo'lib qolmasligi uchun), o'lchov DOIM ko'z uchun
+  // joy ajratilgan deb hisoblab bajariladi (_kEyeSlotWidth pastda) — shu
+  // bilan ikonka ko'rsatilsa ham, ko'rsatilmasa ham layout o'zgarmaydi.
+  static const double _kEyeSlotWidth = 26.0;
+
+  bool _isTruncated(BuildContext context, TextStyle style, double maxWidth) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: maxWidth);
+    return painter.didExceedMaxLines;
+  }
+
+  void _showFullValueSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      sheetAnimationStyle: _kSheetAnimationStyle,
+      useSafeArea: true,
+      builder: (ctx) => _FullValueSheet(label: label, value: value),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = TextStyle(fontSize: 13, color: textS);
+    final valueStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textP);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14), border: Border.all(color: border, width: 0.5)),
-      child: stacked
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 18, color: AppTheme.primaryColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(label, style: TextStyle(fontSize: 13, color: textS)),
-                      const SizedBox(height: 3),
-                      Text(value,
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textP),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
+      // 2-band: BITTA qator — ikonka, sarlavha (Flexible: kerak bo'lsa
+      // qisqaradi/"..." bo'ladi, lekin o'z tabiiy kengligidan ortiq
+      // JOY TALAB QILMAYDI), qiymat (Expanded, flex:2 — sarlavhaga
+      // nisbatan USTUVOR, textAlign:end, bitta qatorda, sig'masa "...").
+      // Sarlavha Expanded EMAS — aks holda (avvalgi holat) u qiymat bilan
+      // teng ulushga da'vo qilib, qisqa sarlavha uchun ham bo'sh joy band
+      // qilib qo'yardi, natijada uzun qiymatlar KERAKSIZ ERTA "..."
+      // bo'lib qolardi.
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: AppTheme.primaryColor),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(label, style: labelStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: LayoutBuilder(builder: (context, constraints) {
+              final availableForText =
+                  (constraints.maxWidth - _kEyeSlotWidth - 4).clamp(0.0, double.infinity);
+              final truncated = _isTruncated(context, valueStyle, availableForText);
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(value, style: valueStyle,
+                        textAlign: TextAlign.end, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
-                ),
-              ],
-            )
-          : Row(children: [
-              Icon(icon, size: 18, color: AppTheme.primaryColor),
-              const SizedBox(width: 10),
-              Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: textS))),
-              Flexible(
-                child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textP),
-                    textAlign: TextAlign.end, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  SizedBox(
+                    width: _kEyeSlotWidth,
+                    child: truncated
+                        ? IconButton(
+                            icon: const Icon(Icons.remove_red_eye_outlined, size: 16, color: AppTheme.primaryColor),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            onPressed: () => _showFullValueSheet(context),
+                          )
+                        : null,
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 3-band: "ko'z" ikonkasi bosilganda maydonning TO'LIQ qiymatini
+/// ko'rsatadigan bottom-sheet — loyihada mavjud modallar bilan bir xil
+/// uslubda (tortish tutqichi + sarlavha/X qatori, burchak radiusi 24,
+/// _kSheetAnimationStyle animatsiyasi, useSafeArea orqali xavfsiz hudud).
+class _FullValueSheet extends StatelessWidget {
+  final String label;
+  final String value;
+  const _FullValueSheet({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppTheme.darkSurface : Colors.white;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.borderColor;
+    final textPrimary = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final textSecondary = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
+    final tabBg = isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
+      child: Container(
+        decoration: BoxDecoration(color: surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(width: 36, height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(color: border, borderRadius: BorderRadius.circular(2))),
+            ),
+            Row(children: [
+              Expanded(
+                child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textPrimary)),
               ),
+              CloseCircleButton(bg: tabBg, iconColor: textSecondary, onTap: () => Navigator.pop(context)),
             ]),
+            const SizedBox(height: 14),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(value, style: TextStyle(fontSize: 14, color: textPrimary, height: 1.4)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
